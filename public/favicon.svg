@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Waggulous">
+  <rect width="64" height="64" rx="14" fill="#2f6b50"/>
+  <circle cx="22" cy="24" r="6" fill="#f2bd83"/>
+  <circle cx="34" cy="18" r="6" fill="#f2bd83"/>
+  <circle cx="45" cy="25" r="6" fill="#f2bd83"/>
+  <circle cx="28" cy="38" r="9" fill="#fffdf8"/>
+  <circle cx="40" cy="38" r="9" fill="#fffdf8"/>
+  <path d="M25 35c3-7 11-7 14 0l4 10c2 5-2 9-7 7-2-1-5-1-7 0-5 2-9-2-7-7l3-10Z" fill="#fffdf8"/>
+</svg>
