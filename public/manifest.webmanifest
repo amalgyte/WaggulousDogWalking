@@ -2,15 +2,15 @@
   "name": "Waggulous Pet Care",
   "short_name": "Waggulous",
   "description": "Dog walking and pet sitting bookings with pets, approvals, payments summary, messaging, and pickup logs.",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": ".",
+  "scope": ".",
   "display": "standalone",
   "background_color": "#fffdf8",
   "theme_color": "#2f6b50",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "favicon.svg",
       "sizes": "64x64",
       "type": "image/svg+xml",
       "purpose": "any maskable"

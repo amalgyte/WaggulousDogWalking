@@ -1,5 +1,5 @@
 const CACHE_NAME = 'waggulous-app-shell-v1'
-const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg']
+const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -36,7 +36,7 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy))
           return response
         })
-        .catch(() => caches.match('/index.html'))
+        .catch(() => caches.match('./index.html'))
     }),
   )
 })
