@@ -1057,7 +1057,9 @@ function WalkerDashboard({
     .filter(
       (booking) =>
         booking.walkerId === user.id &&
-        ['approved', 'in-progress', 'completed'].includes(booking.status),
+        ['requested', 'approved', 'in-progress', 'completed'].includes(
+          booking.status,
+        ),
     )
     .sort((a, b) => {
       const priority: Record<BookingStatus, number> = {
@@ -1077,7 +1079,7 @@ function WalkerDashboard({
       (booking) =>
         user.canSelfAssign &&
         !booking.walkerId &&
-        booking.status === 'approved' &&
+        ['requested', 'approved'].includes(booking.status) &&
         booking.date >= today &&
         booking.date <= claimWindowEnd,
     )
@@ -1160,7 +1162,10 @@ function WalkerDashboard({
                     <button
                       className="button primary"
                       type="button"
-                      disabled={Boolean(booking.pickedUpAt)}
+                      disabled={
+                        booking.status !== 'approved' ||
+                        Boolean(booking.pickedUpAt)
+                      }
                       onClick={() =>
                         stampBooking(setData, booking.id, {
                           pickedUpAt: new Date().toISOString(),
@@ -1211,7 +1216,7 @@ function WalkerDashboard({
                 <h3>No unassigned appointments to claim.</h3>
                 <p>
                   Approved unassigned bookings for the next 7 days will appear
-                  here.
+                  here, along with new requests awaiting owner approval.
                 </p>
               </div>
             )}

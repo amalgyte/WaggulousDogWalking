@@ -49,6 +49,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(page.getByRole('heading', { name: 'Bertie' })).toBeVisible()
 
   await page.getByRole('button', { name: 'Request' }).click()
+  await page.getByLabel('Service').selectOption('s-pop-in')
   await page.getByRole('checkbox', { name: 'Bertie' }).check()
   await page.getByLabel('Date').fill(claimableDate)
   await page.getByLabel('Time').fill('10:00')
@@ -74,11 +75,6 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   ).toBeVisible()
   await page.waitForFunction(() => window.scrollY === 0)
   await page.screenshot({ path: 'test-results/mobile-owner.png' })
-  await page
-    .locator('article')
-    .filter({ hasText: 'Bertie' })
-    .getByRole('button', { name: /approve/i })
-    .click()
 
   await page.getByRole('button', { name: 'Staff' }).click()
   await page.getByLabel('Name').fill('Jordan Staff')
@@ -102,7 +98,10 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(page.getByText('No appointments assigned.')).toBeVisible()
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
-  ).toContainText('30 minute walk')
+  ).toContainText('Pet sitting pop-in')
+  await expect(
+    page.locator('article').filter({ hasText: 'Bertie' }),
+  ).toContainText('requested')
   await page
     .locator('article')
     .filter({ hasText: 'Bertie' })
@@ -113,10 +112,15 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
       .locator('article')
       .filter({ hasText: 'Bertie' })
       .getByRole('button', { name: /picked up/i }),
-  ).toBeVisible()
+  ).toBeDisabled()
 
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'owner@waggulous.local')
+  await page
+    .locator('article')
+    .filter({ hasText: 'Bertie' })
+    .getByRole('button', { name: /approve/i })
+    .click()
   await page.getByRole('button', { name: 'Staff' }).click()
   await page
     .locator('article')
