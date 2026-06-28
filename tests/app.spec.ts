@@ -29,6 +29,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
 }) => {
   test.setTimeout(60_000)
   await page.setViewportSize({ width: 390, height: 844 })
+  const todayDate = dateInputFromToday(0)
   const claimableDate = dateInputFromToday(4)
 
   await expect(page.getByRole('heading', { name: /trusted local care/i })).toBeVisible()
@@ -76,6 +77,24 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.waitForFunction(() => window.scrollY === 0)
   await page.screenshot({ path: 'test-results/mobile-owner.png' })
 
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByLabel('Client type').selectOption('new')
+  await page.getByLabel('Client name').fill('Nina Verbal')
+  await page.getByLabel('Client email').fill('nina.verbal@example.com')
+  await page.getByLabel('Pet name').fill('Scout')
+  await page.getByLabel('Breed').fill('Beagle')
+  await page.getByLabel('Date').fill(todayDate)
+  await page.getByLabel('Time').fill('14:30')
+  await page.getByLabel('Staff assignment').selectOption('u-walker')
+  await page.getByRole('button', { name: /add approved booking/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'Approved 30 minute walk booking added for Nina Verbal',
+  )
+  await page.getByRole('button', { name: 'Bookings' }).click()
+  await expect(
+    page.locator('article').filter({ hasText: 'Nina Verbal' }),
+  ).toContainText('Scout')
+
   await page.getByRole('button', { name: 'Staff' }).click()
   await page.getByLabel('Name').fill('Jordan Staff')
   await page.getByLabel('Email').fill('jordan@waggulous.local')
@@ -119,6 +138,23 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   ).toBeDisabled()
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
+  ).toContainText('approved')
+
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByLabel('Client type').selectOption('new')
+  await page.getByLabel('Client name').fill('Casey Phone')
+  await page.getByLabel('Client email').fill('casey.phone@example.com')
+  await page.getByLabel('Pet name').fill('Rolo')
+  await page.getByLabel('Species').fill('Dog')
+  await page.getByLabel('Date').fill(todayDate)
+  await page.getByLabel('Time').fill('15:45')
+  await page.getByRole('button', { name: /add approved booking/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'Approved 30 minute walk booking added for Casey Phone',
+  )
+  await page.getByRole('button', { name: 'Jobs' }).click()
+  await expect(
+    page.locator('article').filter({ hasText: 'Rolo' }),
   ).toContainText('approved')
 
   await page.getByRole('button', { name: /sign out/i }).click()

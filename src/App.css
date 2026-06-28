@@ -538,6 +538,23 @@ a:focus-visible {
   padding-top: 18px;
 }
 
+.inline-section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.inline-section h3 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.compact-grid {
+  gap: 12px;
+}
+
 .empty-state {
   background: #fff;
   border: 1px dashed var(--line);
