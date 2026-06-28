@@ -229,7 +229,7 @@ const seedData: AppData = {
       customerId: 'u-customer',
       petIds: ['p-mabel'],
       serviceId: 's-walk-30',
-      date: '2026-06-29',
+      date: formatDateInputValue(),
       time: '09:30',
       notes: 'Please use the blue harness.',
       status: 'approved',
@@ -256,7 +256,7 @@ const seedData: AppData = {
       id: 't-1',
       customerId: 'u-customer',
       bookingId: 'b-1',
-      date: '2026-06-29',
+      date: formatDateInputValue(),
       description: 'Approved 30 minute walk for Mabel',
       amount: 14,
       status: 'owed',
@@ -336,6 +336,14 @@ function getDefaultStartTimeForDate(dateValue: string) {
   if (!dateValue) return ''
   if (dateValue === formatDateInputValue()) return formatTimeInputValue()
   return '00:00'
+}
+
+function canPickUpBooking(booking: Booking) {
+  return (
+    booking.status === 'approved' &&
+    !booking.pickedUpAt &&
+    booking.date <= formatDateInputValue()
+  )
 }
 
 function formatDateTime(value?: string) {
@@ -1198,10 +1206,7 @@ function WalkerDashboard({
                     <button
                       className="button primary"
                       type="button"
-                      disabled={
-                        booking.status !== 'approved' ||
-                        Boolean(booking.pickedUpAt)
-                      }
+                      disabled={!canPickUpBooking(booking)}
                       onClick={() =>
                         stampBooking(setData, booking.id, {
                           pickedUpAt: new Date().toISOString(),

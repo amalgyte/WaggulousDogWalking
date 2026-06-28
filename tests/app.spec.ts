@@ -116,7 +116,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
       .locator('article')
       .filter({ hasText: 'Bertie' })
       .getByRole('button', { name: /picked up/i }),
-  ).toBeEnabled()
+  ).toBeDisabled()
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
   ).toContainText('approved')
