@@ -1282,6 +1282,7 @@ function StaffAdminPanel({
 }) {
   const staff = data.users.filter((candidate) => candidate.role === 'walker')
   const [error, setError] = useState('')
+  const [selectedStaffId, setSelectedStaffId] = useState(staff[0]?.id ?? '')
   const [draft, setDraft] = useState({
     name: '',
     email: '',
@@ -1291,6 +1292,13 @@ function StaffAdminPanel({
     avatar: '',
     canSelfAssign: false,
   })
+  const selectedStaff =
+    staff.find((member) => member.id === selectedStaffId) ?? staff[0]
+  const selectedAppointments = selectedStaff
+    ? data.bookings
+        .filter((booking) => booking.walkerId === selectedStaff.id)
+        .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
+    : []
 
   function addStaff(event: FormEvent) {
     event.preventDefault()
@@ -1311,24 +1319,24 @@ function StaffAdminPanel({
       return
     }
 
+    const newStaff: User = {
+      id: makeId('u'),
+      name: draft.name.trim(),
+      email: draft.email.trim(),
+      password: draft.password,
+      role: 'walker',
+      phone: draft.phone.trim(),
+      address: draft.address.trim(),
+      avatar: draft.avatar || undefined,
+      canSelfAssign: draft.canSelfAssign,
+      holidays: [],
+    }
+
     setData({
       ...data,
-      users: [
-        ...data.users,
-        {
-          id: makeId('u'),
-          name: draft.name.trim(),
-          email: draft.email.trim(),
-          password: draft.password,
-          role: 'walker',
-          phone: draft.phone.trim(),
-          address: draft.address.trim(),
-          avatar: draft.avatar || undefined,
-          canSelfAssign: draft.canSelfAssign,
-          holidays: [],
-        },
-      ],
+      users: [...data.users, newStaff],
     })
+    setSelectedStaffId(newStaff.id)
     setDraft({
       name: '',
       email: '',
@@ -1352,6 +1360,20 @@ function StaffAdminPanel({
       }))
     }
     reader.readAsDataURL(file)
+  }
+
+  function reassignAppointment(bookingId: string, walkerId: string) {
+    setData((current) => ({
+      ...current,
+      bookings: current.bookings.map((booking) =>
+        booking.id === bookingId
+          ? {
+              ...booking,
+              walkerId: walkerId || undefined,
+            }
+          : booking,
+      ),
+    }))
   }
 
   return (
@@ -1473,11 +1495,118 @@ function StaffAdminPanel({
                   />
                   Can claim unassigned appointments
                 </label>
+                <button
+                  className="button ghost staff-toggle"
+                  type="button"
+                  onClick={() => setSelectedStaffId(member.id)}
+                >
+                  View profile and appointments
+                </button>
               </div>
             </article>
           )
         })}
       </div>
+      {selectedStaff && (
+        <section className="workspace nested-workspace">
+          <WorkspaceTitle
+            eyebrow="Staff detail"
+            title={`${selectedStaff.name} profile and appointments.`}
+          />
+          <div className="staff-detail-grid">
+            <article className="profile-summary">
+              <StaffAvatar user={selectedStaff} />
+              <div>
+                <h3>{selectedStaff.name}</h3>
+                <p>{selectedStaff.email}</p>
+                <p className="muted">{selectedStaff.phone || 'No phone'}</p>
+                <p className="muted">
+                  {selectedStaff.address || 'No address on file'}
+                </p>
+                <p className="muted">
+                  {selectedStaff.canSelfAssign
+                    ? 'Can claim unassigned appointments'
+                    : 'Cannot claim unassigned appointments'}
+                </p>
+              </div>
+            </article>
+            <article className="profile-summary">
+              <div>
+                <h3>Availability</h3>
+                {(selectedStaff.holidays ?? []).length === 0 ? (
+                  <p className="muted">No holiday or unavailable entries.</p>
+                ) : (
+                  (selectedStaff.holidays ?? []).map((holiday) => (
+                    <p className="muted" key={holiday.id}>
+                      {formatAvailabilityWindow(holiday)} · {holiday.status}
+                    </p>
+                  ))
+                )}
+              </div>
+            </article>
+          </div>
+          <WorkspaceTitle
+            eyebrow="Appointments"
+            title="Assigned appointments and reassignment."
+          />
+          {selectedAppointments.length === 0 ? (
+            <div className="empty-state">
+              <h3>No appointments assigned.</h3>
+              <p>This staff member does not currently have assigned jobs.</p>
+            </div>
+          ) : (
+            <div className="booking-stack">
+              {selectedAppointments.map((booking) => {
+                const service = data.services.find(
+                  (candidate) => candidate.id === booking.serviceId,
+                )
+                const customer = data.users.find(
+                  (candidate) => candidate.id === booking.customerId,
+                )
+                const pets = data.pets.filter((pet) =>
+                  booking.petIds.includes(pet.id),
+                )
+
+                return (
+                  <article className="booking-row" key={booking.id}>
+                    <div>
+                      <span className={`status-badge ${booking.status}`}>
+                        {statusLabel(booking.status)}
+                      </span>
+                      <h3>{service?.name ?? 'Unknown service'}</h3>
+                      <p>
+                        {formatDate(booking.date)} at {booking.time} ·{' '}
+                        {customer?.name}
+                      </p>
+                      <p className="muted">
+                        Pets: {pets.map((pet) => pet.name).join(', ') || 'None'}
+                      </p>
+                    </div>
+                    <div className="row-actions">
+                      <label>
+                        Reassign
+                        <select
+                          value={booking.walkerId ?? ''}
+                          onChange={(event) =>
+                            reassignAppointment(booking.id, event.target.value)
+                          }
+                        >
+                          <option value="">Unassigned</option>
+                          {staff.map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
     </section>
   )
 }

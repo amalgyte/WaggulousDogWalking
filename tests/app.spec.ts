@@ -90,7 +90,12 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
     .getByLabel('Can claim unassigned appointments')
     .check()
   await page.getByRole('button', { name: /add staff/i }).click()
-  await expect(page.getByRole('heading', { name: 'Jordan Staff' })).toBeVisible()
+  await expect(
+    page
+      .locator('.staff-list')
+      .locator('article')
+      .filter({ hasText: 'jordan@waggulous.local' }),
+  ).toBeVisible()
 
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'jordan@waggulous.local')
@@ -110,6 +115,31 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
       .getByRole('button', { name: /picked up/i }),
   ).toBeVisible()
 
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'owner@waggulous.local')
+  await page.getByRole('button', { name: 'Staff' }).click()
+  await page
+    .locator('article')
+    .filter({ hasText: 'Jordan Staff' })
+    .getByRole('button', { name: /view profile and appointments/i })
+    .click()
+  await expect(
+    page.getByRole('heading', {
+      name: /Jordan Staff profile and appointments/i,
+    }),
+  ).toBeVisible()
+  await expect(page.getByText('07700 900333', { exact: true })).toBeVisible()
+  await page
+    .locator('article')
+    .filter({ hasText: 'Bertie' })
+    .getByLabel('Reassign')
+    .selectOption('u-walker')
+  await expect(
+    page.locator('article').filter({ hasText: 'Bertie' }),
+  ).toHaveCount(0)
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'jordan@waggulous.local')
   await page.getByRole('button', { name: 'Profile' }).click()
   await page.getByLabel('Phone').fill('07700 900444')
   await page.getByRole('button', { name: /save profile/i }).click()
@@ -139,7 +169,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   ).toBeVisible()
   await page
     .locator('article')
-    .filter({ hasText: '30 minute walk' })
+    .filter({ hasText: 'Mabel' })
     .getByRole('button', { name: /picked up/i })
     .click()
   await expect(page.getByText('in progress')).toBeVisible()
