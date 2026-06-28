@@ -1,4 +1,11 @@
 import { expect, test } from '@playwright/test'
+import type { Page } from '@playwright/test'
+
+async function loginWithEmail(page: Page, email: string) {
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Password').fill('demo')
+  await page.locator('.auth-panel form').getByRole('button', { name: 'Login' }).click()
+}
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
@@ -15,9 +22,11 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.setViewportSize({ width: 390, height: 844 })
 
   await expect(page.getByRole('heading', { name: /trusted local care/i })).toBeVisible()
+  await expect(page.getByText('Owner console')).toHaveCount(0)
+  await expect(page.getByText('Walker workflow')).toHaveCount(0)
   await page.screenshot({ path: 'test-results/mobile-landing.png' })
 
-  await page.getByRole('button', { name: /customer: sam@example.com/i }).click()
+  await page.getByRole('button', { name: 'sam@example.com' }).click()
   await expect(
     page.getByRole('heading', { name: /your pets, bookings, and balance/i }),
   ).toBeVisible()
@@ -41,7 +50,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(page.getByText(/payments are handled by an outsourced service/i)).toBeVisible()
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await page.getByRole('button', { name: /owner: owner@waggulous.local/i }).click()
+  await loginWithEmail(page, 'owner@waggulous.local')
   await expect(
     page.getByRole('heading', { name: /approve bookings and assign walkers/i }),
   ).toBeVisible()
@@ -49,7 +58,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.screenshot({ path: 'test-results/mobile-owner.png' })
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await page.getByRole('button', { name: /walker: walker@waggulous.local/i }).click()
+  await loginWithEmail(page, 'walker@waggulous.local')
   await expect(
     page.getByRole('heading', { name: /log pickup and return/i }),
   ).toBeVisible()

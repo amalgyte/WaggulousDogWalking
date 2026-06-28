@@ -159,7 +159,7 @@ const seedData: AppData = {
       id: 's-walk-30',
       name: '30 minute walk',
       type: 'walking',
-      description: 'Local solo or small-group walk with pickup and return log.',
+      description: 'Local solo or small-group walk with clear care updates.',
       duration: '30 min',
       price: 14,
       active: true,
@@ -454,8 +454,8 @@ function LandingPage({
           <p className="eyebrow">Dog walking and pet sitting</p>
           <h1>Trusted local care for pets with busy humans.</h1>
           <p>
-            Waggulous handles bookings, approvals, updates, and pickup-to-return
-            logs in one calm mobile app.
+            Book dog walks and pet sitting, keep every pet profile in one
+            place, and follow updates from request to completed visit.
           </p>
           <div className="hero-actions">
             <a className="button primary" href="#login">
@@ -471,15 +471,15 @@ function LandingPage({
       <section className="trust-strip" aria-label="Service highlights">
         <div>
           <ShieldCheck size={20} />
-          <span>Approved walkers</span>
+          <span>Trusted local care</span>
         </div>
         <div>
           <Clock size={20} />
-          <span>Pickup and return logs</span>
+          <span>Simple booking requests</span>
         </div>
         <div>
           <MessageCircle size={20} />
-          <span>Booking messages</span>
+          <span>Messages and updates</span>
         </div>
       </section>
 
@@ -511,24 +511,24 @@ function LandingPage({
 
       <section className="app-band" id="app">
         <div className="section-heading">
-          <p className="eyebrow">MVP booking app</p>
-          <h2>One login, three practical workspaces.</h2>
+          <p className="eyebrow">For pet owners</p>
+          <h2>Your pet care requests, records, and updates in one place.</h2>
         </div>
         <div className="feature-list">
           <Feature
             icon={<UserRound size={20} />}
-            title="Customer portal"
-            text="Add named pets, upload pictures, request care, see prices, track owed monies, and read historical transactions."
+            title="Pet profiles"
+            text="Add named pets, upload pictures, and keep care notes ready for every walk or visit."
           />
           <Feature
             icon={<Sparkles size={20} />}
-            title="Owner console"
-            text="Approve or decline requests, assign walkers, maintain services and prices, and reply to booking messages."
+            title="Easy service requests"
+            text="Choose walking or pet sitting, see the price before booking, and add practical instructions."
           />
           <Feature
             icon={<Check size={20} />}
-            title="Walker workflow"
-            text="See authorised bookings and record the exact pickup and return events for each pet."
+            title="Clear account view"
+            text="See owed monies, historical transactions, booking status, and messages without storing payment details."
           />
         </div>
       </section>
@@ -582,6 +582,7 @@ function AuthPanel({
   onLogin: (id: string) => void
   onSignup: (name: string, email: string, password: string) => void
 }) {
+  const demoUsers = data.users.filter((user) => user.role === 'customer')
   const [email, setEmail] = useState('sam@example.com')
   const [password, setPassword] = useState('demo')
   const [name, setName] = useState('')
@@ -671,8 +672,8 @@ function AuthPanel({
         </button>
       </form>
       <div className="demo-logins">
-        <p>Demo accounts</p>
-        {data.users.map((user) => (
+        <p>Demo customer account</p>
+        {demoUsers.map((user) => (
           <button
             key={user.id}
             type="button"
@@ -682,7 +683,7 @@ function AuthPanel({
               onLogin(user.id)
             }}
           >
-            {user.role}: {user.email}
+            {user.email}
           </button>
         ))}
       </div>
