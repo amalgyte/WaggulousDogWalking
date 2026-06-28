@@ -39,6 +39,7 @@ type BookingStatus =
   | 'in-progress'
   | 'completed'
   | 'declined'
+  | 'cancelled'
 
 type User = {
   id: string
@@ -106,15 +107,32 @@ type Booking = {
   petIds: string[]
   serviceId: string
   slotId?: string
+  recurringBookingId?: string
   date: string
   time: string
   endTime?: string
   notes: string
   status: BookingStatus
   price: number
+  cancellationCharge?: 'pending' | 'chargeable' | 'waived'
+  cancelledAt?: string
   walkerId?: string
   pickedUpAt?: string
   returnedAt?: string
+}
+
+type RecurringBooking = {
+  id: string
+  customerId: string
+  petIds: string[]
+  serviceId: string
+  slotId: string
+  startDate: string
+  days: number[]
+  status: 'active' | 'halted'
+  createdById: string
+  createdAt: string
+  haltedAt?: string
 }
 
 type Transaction = {
@@ -146,6 +164,7 @@ type AppData = {
   pets: Pet[]
   services: Service[]
   serviceSlots: ServiceSlot[]
+  recurringBookings: RecurringBooking[]
   bookings: Booking[]
   transactions: Transaction[]
   messages: Message[]
@@ -302,6 +321,7 @@ const seedData: AppData = {
       active: true,
     },
   ],
+  recurringBookings: [],
   bookings: [
     {
       id: 'b-1',
@@ -371,6 +391,7 @@ function loadData(): AppData {
     return {
       ...parsed,
       serviceSlots: parsed.serviceSlots ?? seedData.serviceSlots,
+      recurringBookings: parsed.recurringBookings ?? [],
     }
   } catch {
     return seedData
@@ -474,6 +495,20 @@ function addDaysInputValue(dateValue: string, days: number) {
   const date = new Date(`${dateValue}T12:00:00`)
   date.setDate(date.getDate() + days)
   return formatDateInputValue(date)
+}
+
+function getRecurringDates(startDate: string, days: number[], weekCount = 8) {
+  const dates: string[] = []
+  const totalDays = weekCount * 7
+
+  for (let offset = 0; offset < totalDays; offset += 1) {
+    const dateValue = addDaysInputValue(startDate, offset)
+    if (days.includes(dayOfWeekFromDateValue(dateValue))) {
+      dates.push(dateValue)
+    }
+  }
+
+  return dates
 }
 
 function formatTimeInputValue(date = new Date()) {
@@ -580,6 +615,22 @@ function validateSlotBooking(
     return 'That slot is already full.'
   }
   return ''
+}
+
+function validateRecurringSlotBookings(
+  data: AppData,
+  slot: ServiceSlot | undefined,
+  dates: string[],
+) {
+  if (!slot) return 'Choose an available slot.'
+
+  const unavailableDate = dates.find((dateValue) =>
+    validateSlotBooking(data, slot, dateValue),
+  )
+
+  return unavailableDate
+    ? `${slot.label} is not available on ${formatDate(unavailableDate)}.`
+    : ''
 }
 
 function validateManualBookingTime(
@@ -1174,6 +1225,47 @@ function OwnerDashboard({
   >('queue')
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
 
+  function resolveCancellationCharge(booking: Booking, chargeable: boolean) {
+    setData((current) => {
+      const currentBooking =
+        current.bookings.find((candidate) => candidate.id === booking.id) ??
+        booking
+      const outstanding = calculateBookingOutstanding(current, currentBooking)
+      const waiver: Transaction | null =
+        !chargeable && outstanding > 0
+          ? {
+              id: makeId('t'),
+              bookingId: currentBooking.id,
+              customerId: currentBooking.customerId,
+              date: formatDateInputValue(),
+              description: 'Waived cancellation charge',
+              amount: outstanding,
+              status: 'paid',
+              type: 'payment',
+              method: 'other',
+              recordedById: user.id,
+              confirmedById: user.id,
+              createdAt: new Date().toISOString(),
+            }
+          : null
+
+      return {
+        ...current,
+        bookings: current.bookings.map((candidate) =>
+          candidate.id === currentBooking.id
+            ? {
+                ...candidate,
+                cancellationCharge: chargeable ? 'chargeable' : 'waived',
+              }
+            : candidate,
+        ),
+        transactions: waiver
+          ? [waiver, ...current.transactions]
+          : current.transactions,
+      }
+    })
+  }
+
   return (
     <div className="dashboard-grid">
       <DashboardNav
@@ -1284,6 +1376,34 @@ function OwnerDashboard({
                     user={user}
                     canConfirm
                   />
+                  {booking.status === 'cancelled' &&
+                    booking.cancellationCharge === 'pending' && (
+                      <div className="payment-controls">
+                        <p className="muted">
+                          Cancelled slot awaiting owner charge decision.
+                        </p>
+                        <div className="row-actions">
+                          <button
+                            className="button primary"
+                            type="button"
+                            onClick={() =>
+                              resolveCancellationCharge(booking, true)
+                            }
+                          >
+                            Mark chargeable
+                          </button>
+                          <button
+                            className="button ghost"
+                            type="button"
+                            onClick={() =>
+                              resolveCancellationCharge(booking, false)
+                            }
+                          >
+                            Not chargeable
+                          </button>
+                        </div>
+                      </div>
+                    )}
                 </article>
               )
             })}
@@ -1347,6 +1467,7 @@ function WalkerDashboard({
         requested: 2,
         completed: 3,
         declined: 4,
+        cancelled: 5,
       }
       return (
         priority[a.status] - priority[b.status] ||
@@ -1651,6 +1772,8 @@ function ClientBookingPanel({
     serviceId: activeServices[0]?.id ?? '',
     scheduleMode: 'manual' as 'slot' | 'manual',
     slotId: '',
+    recurring: false,
+    recurringDays: [] as number[],
     date: formatDateInputValue(),
     time: '',
     notes: '',
@@ -1675,6 +1798,9 @@ function ClientBookingPanel({
   const appointmentSlots = selectedService
     ? getAvailableServiceSlots(data, selectedService.id, bookingDraft.date)
     : []
+  const selectedAppointmentSlot = data.serviceSlots.find(
+    (slot) => slot.id === bookingDraft.slotId,
+  )
 
   function resetClientPetDraft() {
     setClientPetDraft({
@@ -1820,18 +1946,23 @@ function ClientBookingPanel({
 
     const actorWalkerId =
       user.role === 'walker' ? user.id : bookingDraft.walkerId || undefined
-    const selectedSlot = data.serviceSlots.find(
-      (slot) => slot.id === bookingDraft.slotId,
-    )
-
     if (bookingDraft.scheduleMode === 'slot') {
-      const slotError = validateSlotBooking(
-        data,
-        selectedSlot,
-        bookingDraft.date,
-      )
-      if (slotError) {
-        setError(slotError)
+      const recurringDates = bookingDraft.recurring
+        ? getRecurringDates(bookingDraft.date, bookingDraft.recurringDays)
+        : []
+      const slotError = bookingDraft.recurring
+        ? validateRecurringSlotBookings(
+            data,
+            selectedAppointmentSlot,
+            recurringDates,
+          )
+        : validateSlotBooking(data, selectedAppointmentSlot, bookingDraft.date)
+
+      if (
+        slotError ||
+        (bookingDraft.recurring && bookingDraft.recurringDays.length === 0)
+      ) {
+        setError(slotError || 'Choose repeat days for the recurring booking.')
         return
       }
     } else if (!bookingDraft.time) {
@@ -1873,43 +2004,82 @@ function ClientBookingPanel({
         ),
         ...(newPet ? [newPet.id] : []),
       ]
-      const booking: Booking = {
+      const recurringBookingId =
+        bookingDraft.scheduleMode === 'slot' && bookingDraft.recurring
+          ? makeId('rb')
+          : undefined
+      const bookingDates =
+        bookingDraft.scheduleMode === 'slot' && bookingDraft.recurring
+          ? getRecurringDates(bookingDraft.date, bookingDraft.recurringDays)
+          : [bookingDraft.date]
+      const bookings: Booking[] = bookingDates.map((date) => ({
         id: makeId('b'),
         customerId: customer.id,
         petIds,
         serviceId: selectedService.id,
         slotId:
-          bookingDraft.scheduleMode === 'slot' ? selectedSlot?.id : undefined,
-        date: bookingDraft.date,
+          bookingDraft.scheduleMode === 'slot'
+            ? selectedAppointmentSlot?.id
+            : undefined,
+        recurringBookingId,
+        date,
         time:
-          bookingDraft.scheduleMode === 'slot' && selectedSlot
-            ? selectedSlot.startTime
+          bookingDraft.scheduleMode === 'slot' && selectedAppointmentSlot
+            ? selectedAppointmentSlot.startTime
             : bookingDraft.time,
         endTime:
-          bookingDraft.scheduleMode === 'slot' && selectedSlot
-            ? selectedSlot.endTime
+          bookingDraft.scheduleMode === 'slot' && selectedAppointmentSlot
+            ? selectedAppointmentSlot.endTime
             : undefined,
         notes: bookingDraft.notes.trim(),
         status: 'approved',
         price: calculateServicePrice(selectedService, petIds.length),
         walkerId: actorWalkerId,
-      }
+      }))
+      const recurringSeriesRecord: RecurringBooking | null =
+        recurringBookingId && selectedAppointmentSlot
+          ? {
+              id: recurringBookingId,
+              customerId: customer.id,
+              petIds,
+              serviceId: selectedService.id,
+              slotId: selectedAppointmentSlot.id,
+              startDate: bookingDraft.date,
+              days: bookingDraft.recurringDays,
+              status: 'active',
+              createdById: user.id,
+              createdAt: new Date().toISOString(),
+            }
+          : null
       const nextData: AppData = {
         ...current,
+        recurringBookings: recurringSeriesRecord
+          ? [recurringSeriesRecord, ...current.recurringBookings]
+          : current.recurringBookings,
         pets: newPet ? [...current.pets, newPet] : current.pets,
       }
-      const approvalRecords = buildApprovalRecords(booking, nextData, user.id)
+      const approvalRecords = bookings.map((booking) =>
+        buildApprovalRecords(booking, nextData, user.id),
+      )
 
       return {
         ...nextData,
-        bookings: [booking, ...current.bookings],
-        transactions: [approvalRecords.transaction, ...current.transactions],
-        messages: [approvalRecords.message, ...current.messages],
+        bookings: [...bookings, ...current.bookings],
+        transactions: [
+          ...approvalRecords.map((record) => record.transaction),
+          ...current.transactions,
+        ],
+        messages: [
+          ...approvalRecords.map((record) => record.message),
+          ...current.messages,
+        ],
       }
     })
 
     setSuccessMessage(
-      `Approved ${selectedService.name} booking added for ${selectedCustomer.name}.`,
+      bookingDraft.scheduleMode === 'slot' && bookingDraft.recurring
+        ? `Approved ${selectedService.name} recurring booking added for ${selectedCustomer.name}.`
+        : `Approved ${selectedService.name} booking added for ${selectedCustomer.name}.`,
     )
     setPetDraft({
       selectedPetIds: [],
@@ -1923,6 +2093,8 @@ function ClientBookingPanel({
       serviceId: activeServices[0]?.id ?? '',
       scheduleMode: 'manual',
       slotId: '',
+      recurring: false,
+      recurringDays: [],
       date: formatDateInputValue(),
       time: '',
       notes: '',
@@ -2262,6 +2434,8 @@ function ClientBookingPanel({
                   ...bookingDraft,
                   scheduleMode: event.target.value as 'slot' | 'manual',
                   slotId: '',
+                  recurring: false,
+                  recurringDays: [],
                   time: '',
                 })
               }
@@ -2289,12 +2463,16 @@ function ClientBookingPanel({
               Available slot
               <select
                 value={bookingDraft.slotId}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const slot = data.serviceSlots.find(
+                    (candidate) => candidate.id === event.target.value,
+                  )
                   setBookingDraft({
                     ...bookingDraft,
                     slotId: event.target.value,
+                    recurringDays: slot?.days ?? [],
                   })
-                }
+                }}
               >
                 <option value="">Choose available slot</option>
                 {appointmentSlots.map((slot) => (
@@ -2322,6 +2500,50 @@ function ClientBookingPanel({
               />
             </label>
           )}
+          {selectedAppointmentSlot && bookingDraft.scheduleMode === 'slot' && (
+            <label className="toggle-label wide">
+              <input
+                type="checkbox"
+                checked={bookingDraft.recurring}
+                onChange={(event) =>
+                  setBookingDraft({
+                    ...bookingDraft,
+                    recurring: event.target.checked,
+                  })
+                }
+              />
+              Repeat weekly for the next 8 weeks
+            </label>
+          )}
+          {selectedAppointmentSlot &&
+            bookingDraft.scheduleMode === 'slot' &&
+            bookingDraft.recurring && (
+              <fieldset className="wide checkbox-set">
+                <legend>Repeat on</legend>
+                {dayOptions
+                  .filter(([id]) =>
+                    selectedAppointmentSlot.days.includes(Number(id)),
+                  )
+                  .map(([id, label]) => (
+                    <label key={id}>
+                      <input
+                        type="checkbox"
+                        checked={bookingDraft.recurringDays.includes(Number(id))}
+                        onChange={(event) => {
+                          const day = Number(id)
+                          const recurringDays = event.target.checked
+                            ? [...bookingDraft.recurringDays, day].sort()
+                            : bookingDraft.recurringDays.filter(
+                                (value) => value !== day,
+                              )
+                          setBookingDraft({ ...bookingDraft, recurringDays })
+                        }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+              </fieldset>
+            )}
           <label className="wide">
             Booking notes
             <textarea
@@ -3321,6 +3543,8 @@ function BookingRequestPanel({
     petIds: [] as string[],
     date: '',
     slotId: '',
+    recurring: false,
+    recurringDays: [] as number[],
     notes: '',
   })
   const [error, setError] = useState('')
@@ -3334,6 +3558,7 @@ function BookingRequestPanel({
   const availableSlots = selectedService
     ? getAvailableServiceSlots(data, selectedService.id, draft.date)
     : []
+  const selectedSlot = data.serviceSlots.find((slot) => slot.id === draft.slotId)
   const customerBookings = data.bookings
     .filter((booking) => booking.customerId === customer.id)
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
@@ -3346,70 +3571,161 @@ function BookingRequestPanel({
       ['approved', 'in-progress'].includes(booking.status) &&
       booking.date >= today,
   )
+  const recurringSeries = data.recurringBookings.filter(
+    (series) => series.customerId === customer.id,
+  )
+  const recurringFutureAppointments = customerBookings.filter(
+    (booking) =>
+      Boolean(booking.recurringBookingId) &&
+      ['requested', 'approved'].includes(booking.status) &&
+      booking.date >= today,
+  )
 
   function submit(event: FormEvent) {
     event.preventDefault()
     setError('')
 
-    const selectedSlot = data.serviceSlots.find(
-      (slot) => slot.id === draft.slotId,
-    )
-    const slotError = validateSlotBooking(data, selectedSlot, draft.date)
+    const recurringDates =
+      draft.recurring && selectedSlot
+        ? getRecurringDates(draft.date, draft.recurringDays)
+        : []
+    const slotError = draft.recurring
+      ? ''
+      : validateSlotBooking(data, selectedSlot, draft.date)
+    const recurringError =
+      draft.recurring && recurringDates.length > 0
+        ? validateRecurringSlotBookings(data, selectedSlot, recurringDates)
+        : ''
 
     if (
       !selectedService ||
       !selectedSlot ||
       draft.petIds.length === 0 ||
       !draft.date ||
-      slotError
+      slotError ||
+      recurringError ||
+      (draft.recurring && draft.recurringDays.length === 0)
     ) {
-      setError(slotError || 'Choose pets, date, and an available slot.')
+      setError(
+        recurringError ||
+          slotError ||
+          'Choose pets, date, an available slot, and repeat days.',
+      )
       return
     }
 
-    const booking: Booking = {
+    const recurringBookingId = draft.recurring ? makeId('rb') : undefined
+    const bookingDates = draft.recurring ? recurringDates : [draft.date]
+    const bookings: Booking[] = bookingDates.map((date) => ({
       id: makeId('b'),
       customerId: customer.id,
       petIds: draft.petIds,
       serviceId: selectedService.id,
       slotId: selectedSlot.id,
-      date: draft.date,
+      recurringBookingId,
+      date,
       time: selectedSlot.startTime,
       endTime: selectedSlot.endTime,
       notes: draft.notes.trim(),
       status: 'requested',
       price: calculateServicePrice(selectedService, draft.petIds.length),
-    }
+    }))
+    const firstBooking = bookings[0]
+    const recurringSeriesRecord: RecurringBooking | null =
+      draft.recurring && recurringBookingId
+        ? {
+            id: recurringBookingId,
+            customerId: customer.id,
+            petIds: draft.petIds,
+            serviceId: selectedService.id,
+            slotId: selectedSlot.id,
+            startDate: draft.date,
+            days: draft.recurringDays,
+            status: 'active',
+            createdById: customer.id,
+            createdAt: new Date().toISOString(),
+          }
+        : null
 
     setData({
       ...data,
-      bookings: [booking, ...data.bookings],
+      recurringBookings: recurringSeriesRecord
+        ? [recurringSeriesRecord, ...data.recurringBookings]
+        : data.recurringBookings,
+      bookings: [...bookings, ...data.bookings],
       messages: [
         {
           id: makeId('m'),
-          bookingId: booking.id,
+          bookingId: firstBooking.id,
           senderId: customer.id,
           recipientId: 'u-owner',
-          body: `New ${selectedService.name} request for ${formatDate(
-            booking.date,
-          )} at ${formatBookingTime(booking)}.`,
+          body: draft.recurring
+            ? `New recurring ${selectedService.name} request from ${formatDate(
+                firstBooking.date,
+              )} for ${bookings.length} occurrences.`
+            : `New ${selectedService.name} request for ${formatDate(
+                firstBooking.date,
+              )} at ${formatBookingTime(firstBooking)}.`,
           createdAt: new Date().toISOString(),
         },
         ...data.messages,
       ],
     })
     setSuccessMessage(
-      `${selectedService.name} request sent for ${formatDate(
-        booking.date,
-      )} at ${formatBookingTime(booking)}.`,
+      draft.recurring
+        ? `${selectedService.name} recurring request sent for ${bookings.length} appointments.`
+        : `${selectedService.name} request sent for ${formatDate(
+            firstBooking.date,
+          )} at ${formatBookingTime(firstBooking)}.`,
     )
     setDraft({
       serviceId: activeServices[0]?.id ?? '',
       petIds: [],
       date: '',
       slotId: '',
+      recurring: false,
+      recurringDays: [],
       notes: '',
     })
+  }
+
+  function haltRecurringBooking(seriesId: string) {
+    setData((current) => ({
+      ...current,
+      recurringBookings: current.recurringBookings.map((series) =>
+        series.id === seriesId
+          ? { ...series, status: 'halted', haltedAt: new Date().toISOString() }
+          : series,
+      ),
+      bookings: current.bookings.map((booking) =>
+        booking.recurringBookingId === seriesId &&
+        booking.date >= today &&
+        ['requested', 'approved'].includes(booking.status)
+          ? {
+              ...booking,
+              status: 'cancelled',
+              cancellationCharge: 'pending',
+              cancelledAt: new Date().toISOString(),
+            }
+          : booking,
+      ),
+    }))
+  }
+
+  function cancelRecurringOccurrence(bookingId: string) {
+    setData((current) => ({
+      ...current,
+      bookings: current.bookings.map((booking) =>
+        booking.id === bookingId
+          ? {
+              ...booking,
+              status: 'cancelled',
+              cancellationCharge: 'pending',
+              cancelledAt: new Date().toISOString(),
+            }
+          : booking,
+      ),
+    }))
   }
 
   return (
@@ -3466,9 +3782,16 @@ function BookingRequestPanel({
           Available slot
           <select
             value={draft.slotId}
-            onChange={(event) =>
-              setDraft({ ...draft, slotId: event.target.value })
-            }
+            onChange={(event) => {
+              const slot = data.serviceSlots.find(
+                (candidate) => candidate.id === event.target.value,
+              )
+              setDraft({
+                ...draft,
+                slotId: event.target.value,
+                recurringDays: slot?.days ?? [],
+              })
+            }}
           >
             <option value="">
               {draft.date ? 'Choose available slot' : 'Select a date first'}
@@ -3484,6 +3807,41 @@ function BookingRequestPanel({
             ))}
           </select>
         </label>
+        {selectedSlot && (
+          <label className="toggle-label wide">
+            <input
+              type="checkbox"
+              checked={draft.recurring}
+              onChange={(event) =>
+                setDraft({ ...draft, recurring: event.target.checked })
+              }
+            />
+            Repeat weekly for the next 8 weeks
+          </label>
+        )}
+        {selectedSlot && draft.recurring && (
+          <fieldset className="wide checkbox-set">
+            <legend>Repeat on</legend>
+            {dayOptions
+              .filter(([id]) => selectedSlot.days.includes(Number(id)))
+              .map(([id, label]) => (
+                <label key={id}>
+                  <input
+                    type="checkbox"
+                    checked={draft.recurringDays.includes(Number(id))}
+                    onChange={(event) => {
+                      const day = Number(id)
+                      const recurringDays = event.target.checked
+                        ? [...draft.recurringDays, day].sort()
+                        : draft.recurringDays.filter((value) => value !== day)
+                      setDraft({ ...draft, recurringDays })
+                    }}
+                  />
+                  {label}
+                </label>
+              ))}
+          </fieldset>
+        )}
         <label className="wide">
           Notes
           <textarea
@@ -3525,6 +3883,94 @@ function BookingRequestPanel({
           </div>
         ) : (
           <BookingList bookings={existingRequests} data={data} />
+        )}
+      </section>
+      <section className="workspace nested-workspace">
+        <WorkspaceTitle
+          eyebrow="Recurring care"
+          title="Recurring bookings and individual slot changes."
+        />
+        {recurringSeries.length === 0 ? (
+          <div className="empty-state">
+            <h3>No recurring bookings.</h3>
+            <p>Recurring slot requests you create will appear here.</p>
+          </div>
+        ) : (
+          <div className="booking-stack">
+            {recurringSeries.map((series) => {
+              const service = data.services.find(
+                (candidate) => candidate.id === series.serviceId,
+              )
+              const slot = data.serviceSlots.find(
+                (candidate) => candidate.id === series.slotId,
+              )
+
+              return (
+                <article className="booking-row" key={series.id}>
+                  <div>
+                    <span className={`status-badge ${series.status}`}>
+                      {series.status}
+                    </span>
+                    <h3>{service?.name ?? 'Service unavailable'}</h3>
+                    <p>
+                      {slot ? serviceSlotLabel(slot) : 'Slot unavailable'} · from{' '}
+                      {formatDate(series.startDate)}
+                    </p>
+                    <p className="muted">
+                      Repeats:{' '}
+                      {series.days
+                        .map((day) => dayOptions.find(([id]) => Number(id) === day)?.[1])
+                        .join(', ')}
+                    </p>
+                  </div>
+                  <div className="row-actions">
+                    <button
+                      className="button danger"
+                      type="button"
+                      disabled={series.status === 'halted'}
+                      onClick={() => haltRecurringBooking(series.id)}
+                    >
+                      <X size={16} />
+                      Halt recurring booking
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+        {recurringFutureAppointments.length > 0 && (
+          <div className="booking-stack">
+            {recurringFutureAppointments.map((booking) => {
+              const service = data.services.find(
+                (candidate) => candidate.id === booking.serviceId,
+              )
+
+              return (
+                <article className="booking-row" key={booking.id}>
+                  <div>
+                    <span className={`status-badge ${booking.status}`}>
+                      {statusLabel(booking.status)}
+                    </span>
+                    <h3>{service?.name ?? 'Service unavailable'}</h3>
+                    <p>
+                      {formatDate(booking.date)} at {formatBookingTime(booking)}
+                    </p>
+                  </div>
+                  <div className="row-actions">
+                    <button
+                      className="button danger"
+                      type="button"
+                      onClick={() => cancelRecurringOccurrence(booking.id)}
+                    >
+                      <X size={16} />
+                      Cancel this slot
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
         )}
       </section>
       <section className="workspace nested-workspace">

@@ -16,6 +16,17 @@ function dateInputFromToday(days: number) {
   return `${year}-${month}-${day}`
 }
 
+function dateInputForNextWeekday(targetDay: number) {
+  const date = new Date()
+  const currentDay = date.getDay()
+  const offset = ((targetDay - currentDay + 7) % 7) || 7
+  date.setDate(date.getDate() + offset)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
@@ -279,4 +290,88 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
     .getByRole('button', { name: /picked up/i })
     .click()
   await expect(page.getByText('in progress')).toBeVisible()
+})
+
+test('recurring slot bookings can be halted and individual slots cancelled', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const nextMonday = dateInputForNextWeekday(1)
+
+  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await page.getByRole('button', { name: 'Request' }).click()
+  await page.getByLabel('Service').selectOption('s-walk-30')
+  await page.getByRole('checkbox', { name: 'Mabel' }).check()
+  await page.getByLabel('Date', { exact: true }).fill(nextMonday)
+  await page.getByLabel('Available slot').selectOption('slot-walk-early')
+  await page.getByLabel(/repeat weekly/i).check()
+  await page.getByLabel('Thu').uncheck()
+  await page.getByRole('button', { name: /request service/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'recurring request sent',
+  )
+
+  const created = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    const series = data.recurringBookings[0]
+    const bookings = data.bookings.filter(
+      (booking: { recurringBookingId?: string }) =>
+        booking.recurringBookingId === series.id,
+    )
+
+    return {
+      seriesStatus: series.status,
+      days: series.days,
+      count: bookings.length,
+      hasThursday: bookings.some(
+        (booking: { date: string }) =>
+          new Date(`${booking.date}T12:00:00`).getDay() === 4,
+      ),
+    }
+  })
+
+  expect(created.seriesStatus).toBe('active')
+  expect(created.days).toEqual([1, 2, 3, 5])
+  expect(created.count).toBe(32)
+  expect(created.hasThursday).toBe(false)
+
+  await page.getByRole('button', { name: /cancel this slot/i }).first().click()
+  const afterCancel = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.bookings.filter(
+      (booking: { status: string; cancellationCharge?: string }) =>
+        booking.status === 'cancelled' &&
+        booking.cancellationCharge === 'pending',
+    ).length
+  })
+  expect(afterCancel).toBe(1)
+
+  await page
+    .getByRole('button', { name: /halt recurring booking/i })
+    .first()
+    .click()
+  const halted = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return {
+      seriesStatus: data.recurringBookings[0].status,
+      cancelledCount: data.bookings.filter(
+        (booking: { status: string }) => booking.status === 'cancelled',
+      ).length,
+    }
+  })
+  expect(halted.seriesStatus).toBe('halted')
+  expect(halted.cancelledCount).toBeGreaterThan(1)
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'owner@waggulous.local')
+  await page.getByRole('button', { name: /not chargeable/i }).first().click()
+  const chargeDecision = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.bookings.some(
+      (booking: { status: string; cancellationCharge?: string }) =>
+        booking.status === 'cancelled' &&
+        booking.cancellationCharge === 'waived',
+    )
+  })
+  expect(chargeDecision).toBe(true)
 })

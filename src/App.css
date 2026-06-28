@@ -647,6 +647,7 @@ a:focus-visible {
 }
 
 .status-badge.approved,
+.status-badge.active,
 .status-badge.paid {
   background: #edf9ef;
   border-color: #c6e8ce;
@@ -659,6 +660,13 @@ a:focus-visible {
   background: #fff4dc;
   border-color: #f3d59c;
   color: #76500f;
+}
+
+.status-badge.cancelled,
+.status-badge.halted {
+  background: #ffe9e3;
+  border-color: #f2b7a8;
+  color: #8a2e1b;
 }
 
 .status-badge.in-progress {
