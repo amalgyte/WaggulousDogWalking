@@ -102,6 +102,10 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
   ).toContainText('requested')
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('claim and approve')
+    await dialog.accept()
+  })
   await page
     .locator('article')
     .filter({ hasText: 'Bertie' })
@@ -112,15 +116,13 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
       .locator('article')
       .filter({ hasText: 'Bertie' })
       .getByRole('button', { name: /picked up/i }),
-  ).toBeDisabled()
+  ).toBeEnabled()
+  await expect(
+    page.locator('article').filter({ hasText: 'Bertie' }),
+  ).toContainText('approved')
 
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'owner@waggulous.local')
-  await page
-    .locator('article')
-    .filter({ hasText: 'Bertie' })
-    .getByRole('button', { name: /approve/i })
-    .click()
   await page.getByRole('button', { name: 'Staff' }).click()
   await page
     .locator('article')

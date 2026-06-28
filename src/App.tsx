@@ -1086,14 +1086,50 @@ function WalkerDashboard({
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
 
   function claimBooking(bookingId: string) {
-    setData((current) => ({
-      ...current,
-      bookings: current.bookings.map((booking) =>
-        booking.id === bookingId && !booking.walkerId
-          ? { ...booking, walkerId: user.id }
-          : booking,
-      ),
-    }))
+    const bookingToClaim = data.bookings.find(
+      (booking) => booking.id === bookingId,
+    )
+
+    if (
+      bookingToClaim?.status === 'requested' &&
+      !window.confirm(
+        'This appointment is awaiting approval. Clicking OK will claim and approve it.',
+      )
+    ) {
+      return
+    }
+
+    setData((current) => {
+      const currentBooking = current.bookings.find(
+        (booking) => booking.id === bookingId,
+      )
+
+      if (!currentBooking || currentBooking.walkerId) return current
+
+      const shouldApprove = currentBooking.status === 'requested'
+      const approvalRecords = shouldApprove
+        ? buildApprovalRecords(currentBooking, current, user.id)
+        : null
+
+      return {
+        ...current,
+        bookings: current.bookings.map((booking) =>
+          booking.id === bookingId
+            ? {
+                ...booking,
+                walkerId: user.id,
+                status: shouldApprove ? 'approved' : booking.status,
+              }
+            : booking,
+        ),
+        transactions: approvalRecords
+          ? [approvalRecords.transaction, ...current.transactions]
+          : current.transactions,
+        messages: approvalRecords
+          ? [approvalRecords.message, ...current.messages]
+          : current.messages,
+      }
+    })
   }
 
   return (
@@ -2828,11 +2864,7 @@ function approveBooking(
   setData: Dispatch<SetStateAction<AppData>>,
   ownerId: string,
 ) {
-  const service = data.services.find((candidate) => candidate.id === booking.serviceId)
-  const petNames = data.pets
-    .filter((pet) => booking.petIds.includes(pet.id))
-    .map((pet) => pet.name)
-    .join(', ')
+  const approvalRecords = buildApprovalRecords(booking, data, ownerId)
 
   setData({
     ...data,
@@ -2845,29 +2877,48 @@ function approveBooking(
         : candidate,
     ),
     transactions: [
-      {
-        id: makeId('t'),
-        bookingId: booking.id,
-        customerId: booking.customerId,
-        date: booking.date,
-        description: `Approved ${service?.name ?? 'service'} for ${petNames}`,
-        amount: booking.price,
-        status: 'owed',
-      },
+      approvalRecords.transaction,
       ...data.transactions,
     ],
     messages: [
-      {
-        id: makeId('m'),
-        bookingId: booking.id,
-        senderId: ownerId,
-        recipientId: booking.customerId,
-        body: `Your ${service?.name ?? 'service'} request has been approved.`,
-        createdAt: new Date().toISOString(),
-      },
+      approvalRecords.message,
       ...data.messages,
     ],
   })
+}
+
+function buildApprovalRecords(
+  booking: Booking,
+  data: AppData,
+  approverId: string,
+) {
+  const service = data.services.find(
+    (candidate) => candidate.id === booking.serviceId,
+  )
+  const petNames = data.pets
+    .filter((pet) => booking.petIds.includes(pet.id))
+    .map((pet) => pet.name)
+    .join(', ')
+
+  return {
+    transaction: {
+      id: makeId('t'),
+      bookingId: booking.id,
+      customerId: booking.customerId,
+      date: booking.date,
+      description: `Approved ${service?.name ?? 'service'} for ${petNames}`,
+      amount: booking.price,
+      status: 'owed' as const,
+    },
+    message: {
+      id: makeId('m'),
+      bookingId: booking.id,
+      senderId: approverId,
+      recipientId: booking.customerId,
+      body: `Your ${service?.name ?? 'service'} request has been approved.`,
+      createdAt: new Date().toISOString(),
+    },
+  }
 }
 
 function stampBooking(
