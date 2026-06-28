@@ -28,6 +28,11 @@ import './App.css'
 
 type Role = 'customer' | 'owner' | 'walker'
 type ServiceType = 'walking' | 'sitting'
+type MultiPetPricingMode =
+  | 'none'
+  | 'fixed-discount'
+  | 'percent-discount'
+  | 'additional-pet-price'
 type BookingStatus =
   | 'requested'
   | 'approved'
@@ -78,6 +83,10 @@ type Service = {
   duration: string
   price: number
   active: boolean
+  multiPetPricing?: {
+    mode: MultiPetPricingMode
+    amount: number
+  }
 }
 
 type Booking = {
@@ -303,6 +312,48 @@ function formatMoney(value: number) {
     style: 'currency',
     currency: 'GBP',
   }).format(value)
+}
+
+function calculateServicePrice(service: Service, petCount: number) {
+  const count = Math.max(1, petCount)
+  const rule = service.multiPetPricing
+
+  if (!rule || rule.mode === 'none' || count === 1) return service.price
+
+  if (rule.mode === 'additional-pet-price') {
+    return Math.max(0, service.price + rule.amount * (count - 1))
+  }
+
+  const standardTotal = service.price * count
+
+  if (rule.mode === 'fixed-discount') {
+    return Math.max(0, standardTotal - rule.amount)
+  }
+
+  return Math.max(0, standardTotal * (1 - rule.amount / 100))
+}
+
+function multiPetPricingLabel(service: Service) {
+  const rule = service.multiPetPricing
+
+  if (!rule || rule.mode === 'none') return 'No multi-pet adjustment'
+  if (rule.mode === 'fixed-discount') {
+    return `${formatMoney(rule.amount)} off multi-pet total`
+  }
+  if (rule.mode === 'percent-discount') {
+    return `${rule.amount}% off multi-pet total`
+  }
+  return `${formatMoney(service.price)} first pet, ${formatMoney(
+    rule.amount,
+  )} each additional pet`
+}
+
+function buildMultiPetPricing(
+  mode: MultiPetPricingMode,
+  amount: number,
+): Service['multiPetPricing'] {
+  if (mode === 'none') return { mode: 'none', amount: 0 }
+  return { mode, amount: Number.isFinite(amount) ? Math.max(0, amount) : 0 }
 }
 
 function formatDate(value: string) {
@@ -1406,6 +1457,11 @@ function ClientBookingPanel({
   const selectedService = activeServices.find(
     (service) => service.id === bookingDraft.serviceId,
   )
+  const appointmentPetCount =
+    petDraft.selectedPetIds.length + (petDraft.name.trim() ? 1 : 0)
+  const appointmentPrice = selectedService
+    ? calculateServicePrice(selectedService, appointmentPetCount)
+    : 0
 
   function resetClientPetDraft() {
     setClientPetDraft({
@@ -1584,7 +1640,7 @@ function ClientBookingPanel({
         time: bookingDraft.time,
         notes: bookingDraft.notes.trim(),
         status: 'approved',
-        price: selectedService.price,
+        price: calculateServicePrice(selectedService, petIds.length),
         walkerId: actorWalkerId,
       }
       const nextData: AppData = {
@@ -1979,7 +2035,7 @@ function ClientBookingPanel({
               Booking will be approved immediately at{' '}
               <strong>
                 {selectedService
-                  ? formatMoney(selectedService.price)
+                  ? formatMoney(appointmentPrice)
                   : 'choose a service'}
               </strong>
             </span>
@@ -2968,6 +3024,9 @@ function BookingRequestPanel({
   const selectedService = data.services.find(
     (service) => service.id === draft.serviceId,
   )
+  const requestPrice = selectedService
+    ? calculateServicePrice(selectedService, draft.petIds.length)
+    : 0
   const customerBookings = data.bookings
     .filter((booking) => booking.customerId === customer.id)
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
@@ -2996,7 +3055,7 @@ function BookingRequestPanel({
       time: draft.time,
       notes: draft.notes.trim(),
       status: 'requested',
-      price: selectedService.price,
+      price: calculateServicePrice(selectedService, draft.petIds.length),
     }
 
     setData({
@@ -3105,7 +3164,7 @@ function BookingRequestPanel({
           <span>
             Price shown before approval:{' '}
             <strong>
-              {selectedService ? formatMoney(selectedService.price) : 'Choose a service'}
+              {selectedService ? formatMoney(requestPrice) : 'Choose a service'}
             </strong>
           </span>
         </div>
@@ -3233,11 +3292,14 @@ function ServicesPanel({
     duration: '',
     price: '',
     description: '',
+    multiPetMode: 'none' as MultiPetPricingMode,
+    multiPetAmount: '',
   })
 
   function addService(event: FormEvent) {
     event.preventDefault()
     const price = Number(draft.price)
+    const multiPetAmount = Number(draft.multiPetAmount)
     if (!draft.name.trim() || Number.isNaN(price)) return
 
     setData({
@@ -3252,6 +3314,10 @@ function ServicesPanel({
           price,
           description: draft.description.trim(),
           active: true,
+          multiPetPricing: buildMultiPetPricing(
+            draft.multiPetMode,
+            Number.isNaN(multiPetAmount) ? 0 : multiPetAmount,
+          ),
         },
       ],
     })
@@ -3261,6 +3327,8 @@ function ServicesPanel({
       duration: '',
       price: '',
       description: '',
+      multiPetMode: 'none',
+      multiPetAmount: '',
     })
   }
 
@@ -3279,6 +3347,7 @@ function ServicesPanel({
                 {service.type} · {service.duration}
               </p>
               <p className="muted">{service.description}</p>
+              <p className="muted">{multiPetPricingLabel(service)}</p>
             </div>
             <div className="service-admin-controls">
               <label>
@@ -3291,6 +3360,44 @@ function ServicesPanel({
                   onChange={(event) =>
                     updateService(setData, service.id, {
                       price: Number(event.target.value),
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Multi-pet pricing
+                <select
+                  value={service.multiPetPricing?.mode ?? 'none'}
+                  onChange={(event) =>
+                    updateService(setData, service.id, {
+                      multiPetPricing: buildMultiPetPricing(
+                        event.target.value as MultiPetPricingMode,
+                        service.multiPetPricing?.amount ?? 0,
+                      ),
+                    })
+                  }
+                >
+                  <option value="none">No adjustment</option>
+                  <option value="fixed-discount">Fixed discount</option>
+                  <option value="percent-discount">Percentage discount</option>
+                  <option value="additional-pet-price">
+                    First plus additional pets
+                  </option>
+                </select>
+              </label>
+              <label>
+                Rule amount
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={service.multiPetPricing?.amount ?? 0}
+                  onChange={(event) =>
+                    updateService(setData, service.id, {
+                      multiPetPricing: buildMultiPetPricing(
+                        service.multiPetPricing?.mode ?? 'none',
+                        Number(event.target.value),
+                      ),
                     })
                   }
                 />
@@ -3365,6 +3472,38 @@ function ServicesPanel({
               setDraft({ ...draft, description: event.target.value })
             }
             placeholder="What this service includes"
+          />
+        </label>
+        <label>
+          Multi-pet pricing
+          <select
+            value={draft.multiPetMode}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                multiPetMode: event.target.value as MultiPetPricingMode,
+              })
+            }
+          >
+            <option value="none">No adjustment</option>
+            <option value="fixed-discount">Fixed discount</option>
+            <option value="percent-discount">Percentage discount</option>
+            <option value="additional-pet-price">
+              First plus additional pets
+            </option>
+          </select>
+        </label>
+        <label>
+          Rule amount
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            value={draft.multiPetAmount}
+            onChange={(event) =>
+              setDraft({ ...draft, multiPetAmount: event.target.value })
+            }
+            placeholder="5"
           />
         </label>
         <button className="button primary" type="submit">

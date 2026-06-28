@@ -77,18 +77,28 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.waitForFunction(() => window.scrollY === 0)
   await page.screenshot({ path: 'test-results/mobile-owner.png' })
 
+  await page.getByRole('button', { name: 'Services' }).click()
+  const walkServiceRow = page.locator('article').filter({ hasText: '30 minute walk' })
+  await walkServiceRow
+    .getByLabel('Multi-pet pricing')
+    .selectOption('additional-pet-price')
+  await walkServiceRow.getByLabel('Rule amount').fill('8')
+
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByLabel('Client name').fill('Nina Verbal')
   await page.getByLabel('Client email').fill('nina.verbal@example.com')
   await page.getByLabel('Pet name').fill('Scout')
   await page.getByLabel('Breed').fill('Beagle')
+  await page.getByRole('button', { name: /add another pet/i }).click()
+  await page.getByLabel('Pet name').fill('Daisy')
   await page.getByRole('button', { name: /save client/i }).click()
   await expect(page.getByRole('status')).toContainText(
     'Nina Verbal saved. Add an appointment next.',
   )
-  await expect(page.getByRole('status')).toContainText('1 pet saved.')
+  await expect(page.getByRole('status')).toContainText('2 pet saved.')
   await expect(page.locator('form select').first()).toContainText('Nina Verbal')
   await expect(page.getByLabel('Scout')).toBeChecked()
+  await expect(page.getByLabel('Daisy')).toBeChecked()
   await page.getByLabel('Date').fill(todayDate)
   await page.getByLabel('Time').fill('14:30')
   await page.getByLabel('Staff assignment').selectOption('u-walker')
@@ -100,6 +110,9 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(
     page.locator('article').filter({ hasText: 'Nina Verbal' }),
   ).toContainText('Scout')
+  await expect(
+    page.locator('article').filter({ hasText: 'Nina Verbal' }),
+  ).toContainText('£22.00')
 
   await page.getByRole('button', { name: 'Staff' }).click()
   await page.getByLabel('Name').fill('Jordan Staff')
