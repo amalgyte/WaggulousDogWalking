@@ -78,9 +78,13 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.screenshot({ path: 'test-results/mobile-owner.png' })
 
   await page.getByRole('button', { name: 'Clients' }).click()
-  await page.getByLabel('Client type').selectOption('new')
   await page.getByLabel('Client name').fill('Nina Verbal')
   await page.getByLabel('Client email').fill('nina.verbal@example.com')
+  await page.getByRole('button', { name: /save client/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'Nina Verbal saved. Add an appointment next.',
+  )
+  await expect(page.locator('form select').first()).toContainText('Nina Verbal')
   await page.getByLabel('Pet name').fill('Scout')
   await page.getByLabel('Breed').fill('Beagle')
   await page.getByLabel('Date').fill(todayDate)
@@ -141,9 +145,13 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   ).toContainText('approved')
 
   await page.getByRole('button', { name: 'Clients' }).click()
-  await page.getByLabel('Client type').selectOption('new')
   await page.getByLabel('Client name').fill('Casey Phone')
   await page.getByLabel('Client email').fill('casey.phone@example.com')
+  await page.getByRole('button', { name: /save client/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'Casey Phone saved. Add an appointment next.',
+  )
+  await expect(page.locator('form select').first()).toContainText('Casey Phone')
   await page.getByLabel('Pet name').fill('Rolo')
   await page.getByLabel('Species').fill('Dog')
   await page.getByLabel('Date').fill(todayDate)

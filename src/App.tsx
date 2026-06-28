@@ -1352,9 +1352,11 @@ function ClientBookingPanel({
     .sort((a, b) => a.name.localeCompare(b.name))
   const activeServices = data.services.filter((service) => service.active)
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
-  const [clientMode, setClientMode] = useState<'existing' | 'new'>('existing')
+  const [panelTab, setPanelTab] = useState<'client' | 'appointment'>('client')
+  const [selectedClientId, setSelectedClientId] = useState(
+    customers[0]?.id ?? '',
+  )
   const [clientDraft, setClientDraft] = useState({
-    customerId: customers[0]?.id ?? '',
     name: '',
     email: '',
     password: 'demo',
@@ -1378,45 +1380,31 @@ function ClientBookingPanel({
   })
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
-  const selectedCustomerId =
-    clientMode === 'existing' ? clientDraft.customerId : ''
   const selectedCustomer = customers.find(
-    (customer) => customer.id === selectedCustomerId,
+    (customer) => customer.id === selectedClientId,
   )
-  const existingPets = selectedCustomerId
-    ? data.pets.filter((pet) => pet.ownerId === selectedCustomerId)
+  const existingPets = selectedClientId
+    ? data.pets.filter((pet) => pet.ownerId === selectedClientId)
     : []
   const selectedService = activeServices.find(
     (service) => service.id === bookingDraft.serviceId,
   )
 
-  function submit(event: FormEvent) {
+  function saveClient(event: FormEvent) {
     event.preventDefault()
     setError('')
     setSuccessMessage('')
 
-    if (!selectedService || !bookingDraft.date || !bookingDraft.time) {
-      setError('Service, date, and time are required.')
-      return
-    }
-
-    if (clientMode === 'existing' && !selectedCustomer) {
-      setError('Choose an existing client or create a new one.')
-      return
-    }
-
     if (
-      clientMode === 'new' &&
-      (!clientDraft.name.trim() ||
-        !clientDraft.email.trim() ||
-        !clientDraft.password.trim())
+      !clientDraft.name.trim() ||
+      !clientDraft.email.trim() ||
+      !clientDraft.password.trim()
     ) {
       setError('Client name, email, and temporary password are required.')
       return
     }
 
     if (
-      clientMode === 'new' &&
       data.users.some(
         (candidate) =>
           candidate.email.toLowerCase() ===
@@ -1424,6 +1412,55 @@ function ClientBookingPanel({
       )
     ) {
       setError('That client email is already registered.')
+      return
+    }
+
+    const newClient: User = {
+      id: makeId('u'),
+      name: clientDraft.name.trim(),
+      email: clientDraft.email.trim(),
+      password: clientDraft.password,
+      role: 'customer',
+      phone: clientDraft.phone.trim(),
+      address: clientDraft.address.trim(),
+    }
+
+    setData((current) => ({
+      ...current,
+      users: [...current.users, newClient],
+    }))
+    setSelectedClientId(newClient.id)
+    setPanelTab('appointment')
+    setSuccessMessage(`${newClient.name} saved. Add an appointment next.`)
+    setClientDraft({
+      name: '',
+      email: '',
+      password: 'demo',
+      phone: '',
+      address: '',
+    })
+    setPetDraft({
+      selectedPetIds: [],
+      name: '',
+      species: 'Dog',
+      breed: '',
+      age: '',
+      notes: '',
+    })
+  }
+
+  function submitAppointment(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    setSuccessMessage('')
+
+    if (!selectedCustomer) {
+      setError('Choose an existing client before adding an appointment.')
+      return
+    }
+
+    if (!selectedService || !bookingDraft.date || !bookingDraft.time) {
+      setError('Service, date, and time are required.')
       return
     }
 
@@ -1436,20 +1473,9 @@ function ClientBookingPanel({
       user.role === 'walker' ? user.id : bookingDraft.walkerId || undefined
 
     setData((current) => {
-      const customer: User =
-        clientMode === 'new'
-          ? {
-              id: makeId('u'),
-              name: clientDraft.name.trim(),
-              email: clientDraft.email.trim(),
-              password: clientDraft.password,
-              role: 'customer',
-              phone: clientDraft.phone.trim(),
-              address: clientDraft.address.trim(),
-            }
-          : (current.users.find(
-              (candidate) => candidate.id === clientDraft.customerId,
-            ) as User)
+      const customer = current.users.find(
+        (candidate) => candidate.id === selectedCustomer.id,
+      ) as User
       const newPet: Pet | null = petDraft.name.trim()
         ? {
             id: makeId('p'),
@@ -1483,8 +1509,6 @@ function ClientBookingPanel({
       }
       const nextData: AppData = {
         ...current,
-        users:
-          clientMode === 'new' ? [...current.users, customer] : current.users,
         pets: newPet ? [...current.pets, newPet] : current.pets,
       }
       const approvalRecords = buildApprovalRecords(booking, nextData, user.id)
@@ -1498,19 +1522,8 @@ function ClientBookingPanel({
     })
 
     setSuccessMessage(
-      `Approved ${selectedService.name} booking added for ${
-        clientMode === 'new' ? clientDraft.name.trim() : selectedCustomer?.name
-      }.`,
+      `Approved ${selectedService.name} booking added for ${selectedCustomer.name}.`,
     )
-    setClientMode('existing')
-    setClientDraft({
-      customerId: customers[0]?.id ?? '',
-      name: '',
-      email: '',
-      password: 'demo',
-      phone: '',
-      address: '',
-    })
     setPetDraft({
       selectedPetIds: [],
       name: '',
@@ -1532,36 +1545,117 @@ function ClientBookingPanel({
     <section className="workspace">
       <WorkspaceTitle
         eyebrow="Client bookings"
-        title="Add verbal bookings for new or existing clients."
+        title="Save clients, then add verbal appointments."
       />
-      <form className="form-grid" onSubmit={submit}>
-        <label className="wide">
-          Client type
-          <select
-            value={clientMode}
-            onChange={(event) => {
-              setClientMode(event.target.value as typeof clientMode)
-              setPetDraft((current) => ({
-                ...current,
-                selectedPetIds: [],
-              }))
-            }}
-          >
-            <option value="existing">Existing client</option>
-            <option value="new">New client</option>
-          </select>
-        </label>
-        {clientMode === 'existing' ? (
-          <label className="wide">
-            Existing client
-            <select
-              value={clientDraft.customerId}
+      <div className="segmented-control" aria-label="Client booking step">
+        <button
+          className={panelTab === 'client' ? 'is-active' : ''}
+          type="button"
+          onClick={() => {
+            setPanelTab('client')
+            setError('')
+            setSuccessMessage('')
+          }}
+        >
+          New client
+        </button>
+        <button
+          className={panelTab === 'appointment' ? 'is-active' : ''}
+          type="button"
+          onClick={() => {
+            setPanelTab('appointment')
+            setError('')
+            setSuccessMessage('')
+          }}
+        >
+          Appointment
+        </button>
+      </div>
+
+      {panelTab === 'client' && (
+        <form className="form-grid" onSubmit={saveClient}>
+          <label>
+            Client name
+            <input
+              value={clientDraft.name}
+              onChange={(event) =>
+                setClientDraft({ ...clientDraft, name: event.target.value })
+              }
+              placeholder="Client name"
+            />
+          </label>
+          <label>
+            Client email
+            <input
+              type="email"
+              value={clientDraft.email}
+              onChange={(event) =>
+                setClientDraft({ ...clientDraft, email: event.target.value })
+              }
+              placeholder="client@example.com"
+            />
+          </label>
+          <label>
+            Client phone
+            <input
+              value={clientDraft.phone}
+              onChange={(event) =>
+                setClientDraft({ ...clientDraft, phone: event.target.value })
+              }
+              placeholder="07700 900000"
+            />
+          </label>
+          <label>
+            Temporary password
+            <input
+              value={clientDraft.password}
               onChange={(event) =>
                 setClientDraft({
                   ...clientDraft,
-                  customerId: event.target.value,
+                  password: event.target.value,
                 })
               }
+            />
+          </label>
+          <label className="wide">
+            Client address
+            <textarea
+              value={clientDraft.address}
+              onChange={(event) =>
+                setClientDraft({
+                  ...clientDraft,
+                  address: event.target.value,
+                })
+              }
+              placeholder="Home address"
+            />
+          </label>
+          {error && <p className="form-error wide">{error}</p>}
+          {successMessage && (
+            <p className="form-success wide" role="status">
+              {successMessage}
+            </p>
+          )}
+          <button className="button primary" type="submit">
+            <Plus size={16} />
+            Save client
+          </button>
+        </form>
+      )}
+
+      {panelTab === 'appointment' && (
+        <form className="form-grid" onSubmit={submitAppointment}>
+          <label className="wide">
+            Client
+            <select
+              value={selectedClientId}
+              onChange={(event) => {
+                setSelectedClientId(event.target.value)
+                setPetDraft((current) => ({
+                  ...current,
+                  selectedPetIds: [],
+                }))
+              }}
             >
               <option value="">Choose client</option>
               {customers.map((customer) => (
@@ -1571,230 +1665,173 @@ function ClientBookingPanel({
               ))}
             </select>
           </label>
-        ) : (
-          <>
-            <label>
-              Client name
-              <input
-                value={clientDraft.name}
-                onChange={(event) =>
-                  setClientDraft({ ...clientDraft, name: event.target.value })
-                }
-                placeholder="Client name"
-              />
-            </label>
-            <label>
-              Client email
-              <input
-                type="email"
-                value={clientDraft.email}
-                onChange={(event) =>
-                  setClientDraft({ ...clientDraft, email: event.target.value })
-                }
-                placeholder="client@example.com"
-              />
-            </label>
-            <label>
-              Client phone
-              <input
-                value={clientDraft.phone}
-                onChange={(event) =>
-                  setClientDraft({ ...clientDraft, phone: event.target.value })
-                }
-                placeholder="07700 900000"
-              />
-            </label>
-            <label>
-              Temporary password
-              <input
-                value={clientDraft.password}
-                onChange={(event) =>
-                  setClientDraft({
-                    ...clientDraft,
-                    password: event.target.value,
-                  })
-                }
-              />
-            </label>
-            <label className="wide">
-              Client address
-              <textarea
-                value={clientDraft.address}
-                onChange={(event) =>
-                  setClientDraft({
-                    ...clientDraft,
-                    address: event.target.value,
-                  })
-                }
-                placeholder="Home address"
-              />
-            </label>
-          </>
-        )}
-        {existingPets.length > 0 && (
-          <fieldset className="wide checkbox-set">
-            <legend>Existing pets</legend>
-            {existingPets.map((pet) => (
-              <label key={pet.id}>
+          {existingPets.length > 0 && (
+            <fieldset className="wide checkbox-set">
+              <legend>Existing pets</legend>
+              {existingPets.map((pet) => (
+                <label key={pet.id}>
+                  <input
+                    type="checkbox"
+                    checked={petDraft.selectedPetIds.includes(pet.id)}
+                    onChange={(event) => {
+                      const selectedPetIds = event.target.checked
+                        ? [...petDraft.selectedPetIds, pet.id]
+                        : petDraft.selectedPetIds.filter((id) => id !== pet.id)
+                      setPetDraft({ ...petDraft, selectedPetIds })
+                    }}
+                  />
+                  {pet.name}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          <section className="wide inline-section">
+            <h3>Add a pet</h3>
+            <div className="form-grid compact-grid">
+              <label>
+                Pet name
                 <input
-                  type="checkbox"
-                  checked={petDraft.selectedPetIds.includes(pet.id)}
-                  onChange={(event) => {
-                    const selectedPetIds = event.target.checked
-                      ? [...petDraft.selectedPetIds, pet.id]
-                      : petDraft.selectedPetIds.filter((id) => id !== pet.id)
-                    setPetDraft({ ...petDraft, selectedPetIds })
-                  }}
+                  value={petDraft.name}
+                  onChange={(event) =>
+                    setPetDraft({ ...petDraft, name: event.target.value })
+                  }
+                  placeholder="Mabel"
                 />
-                {pet.name}
               </label>
-            ))}
-          </fieldset>
-        )}
-        <section className="wide inline-section">
-          <h3>Add a pet</h3>
-          <div className="form-grid compact-grid">
-            <label>
-              Pet name
-              <input
-                value={petDraft.name}
-                onChange={(event) =>
-                  setPetDraft({ ...petDraft, name: event.target.value })
-                }
-                placeholder="Mabel"
-              />
-            </label>
-            <label>
-              Species
-              <input
-                value={petDraft.species}
-                onChange={(event) =>
-                  setPetDraft({ ...petDraft, species: event.target.value })
-                }
-                placeholder="Dog"
-              />
-            </label>
-            <label>
-              Breed
-              <input
-                value={petDraft.breed}
-                onChange={(event) =>
-                  setPetDraft({ ...petDraft, breed: event.target.value })
-                }
-                placeholder="Cocker Spaniel"
-              />
-            </label>
-            <label>
-              Age
-              <input
-                value={petDraft.age}
-                onChange={(event) =>
-                  setPetDraft({ ...petDraft, age: event.target.value })
-                }
-                placeholder="4"
-              />
-            </label>
-            <label className="wide">
-              Pet notes
-              <textarea
-                value={petDraft.notes}
-                onChange={(event) =>
-                  setPetDraft({ ...petDraft, notes: event.target.value })
-                }
-                placeholder="Harness, feeding, temperament, medication, vet notes"
-              />
-            </label>
-          </div>
-        </section>
-        <label>
-          Service
-          <select
-            value={bookingDraft.serviceId}
-            onChange={(event) =>
-              setBookingDraft({
-                ...bookingDraft,
-                serviceId: event.target.value,
-              })
-            }
-          >
-            {activeServices.map((service) => (
-              <option key={service.id} value={service.id}>
-                {service.name} · {formatMoney(service.price)}
-              </option>
-            ))}
-          </select>
-        </label>
-        {user.role === 'owner' && (
+              <label>
+                Species
+                <input
+                  value={petDraft.species}
+                  onChange={(event) =>
+                    setPetDraft({ ...petDraft, species: event.target.value })
+                  }
+                  placeholder="Dog"
+                />
+              </label>
+              <label>
+                Breed
+                <input
+                  value={petDraft.breed}
+                  onChange={(event) =>
+                    setPetDraft({ ...petDraft, breed: event.target.value })
+                  }
+                  placeholder="Cocker Spaniel"
+                />
+              </label>
+              <label>
+                Age
+                <input
+                  value={petDraft.age}
+                  onChange={(event) =>
+                    setPetDraft({ ...petDraft, age: event.target.value })
+                  }
+                  placeholder="4"
+                />
+              </label>
+              <label className="wide">
+                Pet notes
+                <textarea
+                  value={petDraft.notes}
+                  onChange={(event) =>
+                    setPetDraft({ ...petDraft, notes: event.target.value })
+                  }
+                  placeholder="Harness, feeding, temperament, medication, vet notes"
+                />
+              </label>
+            </div>
+          </section>
           <label>
-            Staff assignment
+            Service
             <select
-              value={bookingDraft.walkerId}
+              value={bookingDraft.serviceId}
               onChange={(event) =>
                 setBookingDraft({
                   ...bookingDraft,
-                  walkerId: event.target.value,
+                  serviceId: event.target.value,
                 })
               }
             >
-              <option value="">Unassigned</option>
-              {walkers.map((walker) => (
-                <option key={walker.id} value={walker.id}>
-                  {walker.name}
+              {activeServices.map((service) => (
+                <option key={service.id} value={service.id}>
+                  {service.name} · {formatMoney(service.price)}
                 </option>
               ))}
             </select>
           </label>
-        )}
-        <label>
-          Date
-          <input
-            type="date"
-            value={bookingDraft.date}
-            onChange={(event) =>
-              setBookingDraft({ ...bookingDraft, date: event.target.value })
-            }
-          />
-        </label>
-        <label>
-          Time
-          <input
-            type="time"
-            value={bookingDraft.time}
-            onChange={(event) =>
-              setBookingDraft({ ...bookingDraft, time: event.target.value })
-            }
-          />
-        </label>
-        <label className="wide">
-          Booking notes
-          <textarea
-            value={bookingDraft.notes}
-            onChange={(event) =>
-              setBookingDraft({ ...bookingDraft, notes: event.target.value })
-            }
-            placeholder="Verbal instructions, access notes, or anything staff should know"
-          />
-        </label>
-        <div className="price-preview">
-          <CreditCard size={18} />
-          <span>
-            Booking will be approved immediately at{' '}
-            <strong>
-              {selectedService ? formatMoney(selectedService.price) : 'choose a service'}
-            </strong>
-          </span>
-        </div>
-        {error && <p className="form-error wide">{error}</p>}
-        {successMessage && (
-          <p className="form-success wide" role="status">
-            {successMessage}
-          </p>
-        )}
-        <button className="button primary" type="submit">
-          <Plus size={16} />
-          Add approved booking
-        </button>
-      </form>
+          {user.role === 'owner' && (
+            <label>
+              Staff assignment
+              <select
+                value={bookingDraft.walkerId}
+                onChange={(event) =>
+                  setBookingDraft({
+                    ...bookingDraft,
+                    walkerId: event.target.value,
+                  })
+                }
+              >
+                <option value="">Unassigned</option>
+                {walkers.map((walker) => (
+                  <option key={walker.id} value={walker.id}>
+                    {walker.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            Date
+            <input
+              type="date"
+              value={bookingDraft.date}
+              onChange={(event) =>
+                setBookingDraft({ ...bookingDraft, date: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Time
+            <input
+              type="time"
+              value={bookingDraft.time}
+              onChange={(event) =>
+                setBookingDraft({ ...bookingDraft, time: event.target.value })
+              }
+            />
+          </label>
+          <label className="wide">
+            Booking notes
+            <textarea
+              value={bookingDraft.notes}
+              onChange={(event) =>
+                setBookingDraft({ ...bookingDraft, notes: event.target.value })
+              }
+              placeholder="Verbal instructions, access notes, or anything staff should know"
+            />
+          </label>
+          <div className="price-preview">
+            <CreditCard size={18} />
+            <span>
+              Booking will be approved immediately at{' '}
+              <strong>
+                {selectedService
+                  ? formatMoney(selectedService.price)
+                  : 'choose a service'}
+              </strong>
+            </span>
+          </div>
+          {error && <p className="form-error wide">{error}</p>}
+          {successMessage && (
+            <p className="form-success wide" role="status">
+              {successMessage}
+            </p>
+          )}
+          <button className="button primary" type="submit">
+            <Plus size={16} />
+            Add approved booking
+          </button>
+        </form>
+      )}
     </section>
   )
 }
