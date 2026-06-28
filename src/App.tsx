@@ -51,6 +51,9 @@ type StaffHoliday = {
   id: string
   startDate: string
   endDate: string
+  allDay: boolean
+  startTime?: string
+  endTime?: string
   reason: string
   status: 'active' | 'cancelled'
 }
@@ -146,6 +149,7 @@ const seedData: AppData = {
           id: 'h-alex-1',
           startDate: '2026-07-15',
           endDate: '2026-07-18',
+          allDay: true,
           reason: 'Family break',
           status: 'active',
         },
@@ -1466,6 +1470,9 @@ function StaffHolidayPanel({
   const [draft, setDraft] = useState({
     startDate: '',
     endDate: '',
+    allDay: true,
+    startTime: '',
+    endTime: '',
     reason: '',
   })
 
@@ -1483,10 +1490,25 @@ function StaffHolidayPanel({
       return
     }
 
+    if (!draft.allDay) {
+      if (!draft.startTime || !draft.endTime) {
+        setError('Start and end times are required for a time range.')
+        return
+      }
+
+      if (draft.startDate === draft.endDate && draft.endTime <= draft.startTime) {
+        setError('End time must be after the start time.')
+        return
+      }
+    }
+
     const holiday: StaffHoliday = {
       id: makeId('h'),
       startDate: draft.startDate,
       endDate: draft.endDate,
+      allDay: draft.allDay,
+      startTime: draft.allDay ? undefined : draft.startTime,
+      endTime: draft.allDay ? undefined : draft.endTime,
       reason: draft.reason.trim(),
       status: 'active',
     }
@@ -1502,7 +1524,14 @@ function StaffHolidayPanel({
           : candidate,
       ),
     })
-    setDraft({ startDate: '', endDate: '', reason: '' })
+    setDraft({
+      startDate: '',
+      endDate: '',
+      allDay: true,
+      startTime: '',
+      endTime: '',
+      reason: '',
+    })
   }
 
   function cancelHoliday(holidayId: string) {
@@ -1550,6 +1579,45 @@ function StaffHolidayPanel({
             }
           />
         </label>
+        <label className="toggle-label wide">
+          <input
+            type="checkbox"
+            checked={draft.allDay}
+            onChange={(event) =>
+              setDraft({
+                ...draft,
+                allDay: event.target.checked,
+                startTime: event.target.checked ? '' : draft.startTime,
+                endTime: event.target.checked ? '' : draft.endTime,
+              })
+            }
+          />
+          All day
+        </label>
+        {!draft.allDay && (
+          <>
+            <label>
+              Start time
+              <input
+                type="time"
+                value={draft.startTime}
+                onChange={(event) =>
+                  setDraft({ ...draft, startTime: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              End time
+              <input
+                type="time"
+                value={draft.endTime}
+                onChange={(event) =>
+                  setDraft({ ...draft, endTime: event.target.value })
+                }
+              />
+            </label>
+          </>
+        )}
         <label className="wide">
           Reason
           <textarea
@@ -1577,6 +1645,13 @@ function StaffHolidayPanel({
               <h3>
                 {formatDate(holiday.startDate)} to {formatDate(holiday.endDate)}
               </h3>
+              <p>
+                {holiday.allDay
+                  ? 'All day'
+                  : `${holiday.startTime ?? 'Start time not set'} to ${
+                      holiday.endTime ?? 'end time not set'
+                    }`}
+              </p>
               <p className="muted">{holiday.reason || 'No reason added.'}</p>
             </div>
             <div className="row-actions">
