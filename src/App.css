@@ -532,6 +532,29 @@ a:focus-visible {
   min-width: 0;
 }
 
+.nested-workspace {
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+  padding-top: 18px;
+}
+
+.empty-state {
+  background: #fff;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  padding: 16px;
+}
+
+.empty-state h3 {
+  color: var(--ink);
+  margin: 0 0 6px;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
 .booking-stack,
 .service-admin-list,
 .message-list {
@@ -662,6 +685,10 @@ a:focus-visible {
 .staff-row p,
 .profile-summary p {
   margin: 0;
+}
+
+.staff-toggle {
+  margin-top: 10px;
 }
 
 .staff-avatar {

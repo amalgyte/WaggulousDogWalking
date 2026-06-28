@@ -44,6 +44,7 @@ type User = {
   address?: string
   phone?: string
   avatar?: string
+  canSelfAssign?: boolean
   holidays?: StaffHoliday[]
 }
 
@@ -144,6 +145,7 @@ const seedData: AppData = {
       role: 'walker',
       phone: '07700 900222',
       address: '14 Park View, Bristol',
+      canSelfAssign: true,
       holidays: [
         {
           id: 'h-alex-1',
@@ -316,6 +318,12 @@ function formatDateInputValue(date = new Date()) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function addDaysInputValue(dateValue: string, days: number) {
+  const date = new Date(`${dateValue}T12:00:00`)
+  date.setDate(date.getDate() + days)
+  return formatDateInputValue(date)
 }
 
 function formatTimeInputValue(date = new Date()) {
@@ -1043,6 +1051,8 @@ function WalkerDashboard({
   user: User
 }) {
   const [tab, setTab] = useState<'jobs' | 'profile' | 'holidays'>('jobs')
+  const today = formatDateInputValue()
+  const claimWindowEnd = addDaysInputValue(today, 7)
   const assignedBookings = data.bookings
     .filter(
       (booking) =>
@@ -1062,6 +1072,27 @@ function WalkerDashboard({
         `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)
       )
     })
+  const claimableBookings = data.bookings
+    .filter(
+      (booking) =>
+        user.canSelfAssign &&
+        !booking.walkerId &&
+        booking.status === 'approved' &&
+        booking.date >= today &&
+        booking.date <= claimWindowEnd,
+    )
+    .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
+
+  function claimBooking(bookingId: string) {
+    setData((current) => ({
+      ...current,
+      bookings: current.bookings.map((booking) =>
+        booking.id === bookingId && !booking.walkerId
+          ? { ...booking, walkerId: user.id }
+          : booking,
+      ),
+    }))
+  }
 
   return (
     <div className="dashboard-grid">
@@ -1081,6 +1112,15 @@ function WalkerDashboard({
             title="Log pickup and return for authorised pets."
           />
           <div className="booking-stack">
+            {assignedBookings.length === 0 && (
+              <div className="empty-state">
+                <h3>No appointments assigned.</h3>
+                <p>
+                  Assigned walks and sitting visits will appear here when they
+                  are allocated to you.
+                </p>
+              </div>
+            )}
             {assignedBookings.map((booking) => {
               const service = data.services.find(
                 (candidate) => candidate.id === booking.serviceId,
@@ -1152,6 +1192,73 @@ function WalkerDashboard({
               )
             })}
           </div>
+          <section className="workspace nested-workspace">
+            <WorkspaceTitle
+              eyebrow="Available to claim"
+              title="Unassigned appointments in the next 7 days."
+            />
+            {!user.canSelfAssign && (
+              <div className="empty-state">
+                <h3>Self-assignment is not enabled.</h3>
+                <p>
+                  An owner or admin can allow you to claim unassigned
+                  appointments from your staff record.
+                </p>
+              </div>
+            )}
+            {user.canSelfAssign && claimableBookings.length === 0 && (
+              <div className="empty-state">
+                <h3>No unassigned appointments to claim.</h3>
+                <p>
+                  Approved unassigned bookings for the next 7 days will appear
+                  here.
+                </p>
+              </div>
+            )}
+            {user.canSelfAssign && claimableBookings.length > 0 && (
+              <div className="booking-stack">
+                {claimableBookings.map((booking) => {
+                  const service = data.services.find(
+                    (candidate) => candidate.id === booking.serviceId,
+                  )
+                  const customer = data.users.find(
+                    (candidate) => candidate.id === booking.customerId,
+                  )
+                  const pets = data.pets.filter((pet) =>
+                    booking.petIds.includes(pet.id),
+                  )
+
+                  return (
+                    <article className="booking-row" key={booking.id}>
+                      <div>
+                        <span className={`status-badge ${booking.status}`}>
+                          {statusLabel(booking.status)}
+                        </span>
+                        <h3>{service?.name ?? 'Unknown service'}</h3>
+                        <p>
+                          {formatDate(booking.date)} at {booking.time} ·{' '}
+                          {customer?.name}
+                        </p>
+                        <p className="muted">
+                          Pets: {pets.map((pet) => pet.name).join(', ')}
+                        </p>
+                      </div>
+                      <div className="row-actions">
+                        <button
+                          className="button primary"
+                          type="button"
+                          onClick={() => claimBooking(booking.id)}
+                        >
+                          <Check size={16} />
+                          Claim appointment
+                        </button>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            )}
+          </section>
         </section>
       )}
 
@@ -1182,6 +1289,7 @@ function StaffAdminPanel({
     phone: '',
     address: '',
     avatar: '',
+    canSelfAssign: false,
   })
 
   function addStaff(event: FormEvent) {
@@ -1216,6 +1324,7 @@ function StaffAdminPanel({
           phone: draft.phone.trim(),
           address: draft.address.trim(),
           avatar: draft.avatar || undefined,
+          canSelfAssign: draft.canSelfAssign,
           holidays: [],
         },
       ],
@@ -1227,6 +1336,7 @@ function StaffAdminPanel({
       phone: '',
       address: '',
       avatar: '',
+      canSelfAssign: false,
     })
   }
 
@@ -1305,6 +1415,16 @@ function StaffAdminPanel({
           Avatar
           <input type="file" accept="image/*" onChange={handleAvatar} />
         </label>
+        <label className="toggle-label wide">
+          <input
+            type="checkbox"
+            checked={draft.canSelfAssign}
+            onChange={(event) =>
+              setDraft({ ...draft, canSelfAssign: event.target.checked })
+            }
+          />
+          Can claim unassigned appointments
+        </label>
         {error && <p className="form-error wide">{error}</p>}
         <button className="button primary" type="submit">
           <Plus size={16} />
@@ -1333,6 +1453,26 @@ function StaffAdminPanel({
                     ? `${activeHolidays.length} active holiday/unavailable entry`
                     : 'No active holiday entries'}
                 </p>
+                <label className="toggle-label staff-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(member.canSelfAssign)}
+                    onChange={(event) =>
+                      setData((current) => ({
+                        ...current,
+                        users: current.users.map((candidate) =>
+                          candidate.id === member.id
+                            ? {
+                                ...candidate,
+                                canSelfAssign: event.target.checked,
+                              }
+                            : candidate,
+                        ),
+                      }))
+                    }
+                  />
+                  Can claim unassigned appointments
+                </label>
               </div>
             </article>
           )
@@ -2512,7 +2652,6 @@ function approveBooking(
         ? {
             ...candidate,
             status: 'approved',
-            walkerId: candidate.walkerId ?? 'u-walker',
           }
         : candidate,
     ),
