@@ -74,14 +74,18 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
 
   await page.getByRole('button', { name: 'Holidays' }).click()
   await page.getByLabel('Start date').fill('2026-08-10')
+  await expect(page.getByLabel('End date')).toHaveAttribute('min', '2026-08-10')
   await page.getByLabel('End date').fill('2026-08-12')
   await page.getByLabel('All day').uncheck()
-  await page.getByLabel('Start time').fill('09:30')
-  await page.getByLabel('End time').fill('13:15')
+  await expect(page.getByLabel('Start time for start date')).toHaveValue('00:00')
+  await page.getByLabel('Start time for start date').fill('09:30')
+  await page.getByLabel('End time for end date').fill('13:15')
   await page.getByLabel('Reason').fill('Summer holiday')
   await page.getByRole('button', { name: /add unavailable dates/i }).click()
   await expect(page.getByText('Summer holiday')).toBeVisible()
-  await expect(page.getByText('09:30 to 13:15')).toBeVisible()
+  await expect(
+    page.getByText(/Start: .*09:30 .* End: .*13:15/),
+  ).toBeVisible()
   await page.getByRole('button', { name: /cancel entry/i }).first().click()
   await expect(page.getByText('cancelled')).toBeVisible()
 

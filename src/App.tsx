@@ -311,6 +311,25 @@ function formatDate(value: string) {
   }).format(new Date(`${value}T12:00:00`))
 }
 
+function formatDateInputValue(date = new Date()) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatTimeInputValue(date = new Date()) {
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${hours}:${minutes}`
+}
+
+function getDefaultStartTimeForDate(dateValue: string) {
+  if (!dateValue) return ''
+  if (dateValue === formatDateInputValue()) return formatTimeInputValue()
+  return '00:00'
+}
+
 function formatDateTime(value?: string) {
   if (!value) return 'Not logged'
 
@@ -324,6 +343,22 @@ function formatDateTime(value?: string) {
 
 function statusLabel(status: BookingStatus) {
   return status.replace('-', ' ')
+}
+
+function formatAvailabilityWindow(holiday: StaffHoliday) {
+  const start = formatDate(holiday.startDate)
+  const end = formatDate(holiday.endDate)
+  const isAllDay = holiday.allDay ?? true
+
+  if (isAllDay) {
+    return holiday.startDate === holiday.endDate
+      ? `${start}, all day`
+      : `${start} to ${end}, all day`
+  }
+
+  return `Start: ${start} at ${
+    holiday.startTime ?? 'time not set'
+  } · End: ${end} at ${holiday.endTime ?? 'time not set'}`
 }
 
 function resetScroll() {
@@ -1466,6 +1501,7 @@ function StaffHolidayPanel({
   user: User
 }) {
   const holidays = user.holidays ?? []
+  const today = formatDateInputValue()
   const [error, setError] = useState('')
   const [draft, setDraft] = useState({
     startDate: '',
@@ -1475,6 +1511,33 @@ function StaffHolidayPanel({
     endTime: '',
     reason: '',
   })
+  const endDateMinimum =
+    draft.startDate && draft.startDate > today ? draft.startDate : today
+
+  function handleStartDateChange(startDate: string) {
+    setDraft((current) => ({
+      ...current,
+      startDate,
+      endDate:
+        current.endDate && current.endDate >= startDate && current.endDate >= today
+          ? current.endDate
+          : startDate >= today
+            ? startDate
+            : today,
+      startTime: current.allDay ? '' : getDefaultStartTimeForDate(startDate),
+    }))
+  }
+
+  function handleAllDayChange(allDay: boolean) {
+    setDraft((current) => ({
+      ...current,
+      allDay,
+      startTime: allDay
+        ? ''
+        : current.startTime || getDefaultStartTimeForDate(current.startDate),
+      endTime: allDay ? '' : current.endTime || '23:59',
+    }))
+  }
 
   function addHoliday(event: FormEvent) {
     event.preventDefault()
@@ -1482,6 +1545,11 @@ function StaffHolidayPanel({
 
     if (!draft.startDate || !draft.endDate) {
       setError('Start and end dates are required.')
+      return
+    }
+
+    if (draft.endDate < today) {
+      setError('End date cannot be in the past.')
       return
     }
 
@@ -1564,15 +1632,14 @@ function StaffHolidayPanel({
           <input
             type="date"
             value={draft.startDate}
-            onChange={(event) =>
-              setDraft({ ...draft, startDate: event.target.value })
-            }
+            onChange={(event) => handleStartDateChange(event.target.value)}
           />
         </label>
         <label>
           End date
           <input
             type="date"
+            min={endDateMinimum}
             value={draft.endDate}
             onChange={(event) =>
               setDraft({ ...draft, endDate: event.target.value })
@@ -1583,21 +1650,14 @@ function StaffHolidayPanel({
           <input
             type="checkbox"
             checked={draft.allDay}
-            onChange={(event) =>
-              setDraft({
-                ...draft,
-                allDay: event.target.checked,
-                startTime: event.target.checked ? '' : draft.startTime,
-                endTime: event.target.checked ? '' : draft.endTime,
-              })
-            }
+            onChange={(event) => handleAllDayChange(event.target.checked)}
           />
           All day
         </label>
         {!draft.allDay && (
           <>
             <label>
-              Start time
+              Start time for start date
               <input
                 type="time"
                 value={draft.startTime}
@@ -1607,7 +1667,7 @@ function StaffHolidayPanel({
               />
             </label>
             <label>
-              End time
+              End time for end date
               <input
                 type="time"
                 value={draft.endTime}
@@ -1642,16 +1702,7 @@ function StaffHolidayPanel({
               <span className={`status-badge ${holiday.status}`}>
                 {holiday.status}
               </span>
-              <h3>
-                {formatDate(holiday.startDate)} to {formatDate(holiday.endDate)}
-              </h3>
-              <p>
-                {holiday.allDay
-                  ? 'All day'
-                  : `${holiday.startTime ?? 'Start time not set'} to ${
-                      holiday.endTime ?? 'end time not set'
-                    }`}
-              </p>
+              <h3>{formatAvailabilityWindow(holiday)}</h3>
               <p className="muted">{holiday.reason || 'No reason added.'}</p>
             </div>
             <div className="row-actions">
