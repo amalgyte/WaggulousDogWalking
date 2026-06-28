@@ -713,7 +713,14 @@ function AuthPanel({
   onLogin: (id: string) => void
   onSignup: (name: string, email: string, password: string) => void
 }) {
-  const demoUsers = data.users.filter((user) => user.role === 'customer')
+  const demoUsers = [...data.users].sort((a, b) => {
+    const roleOrder: Record<Role, number> = {
+      customer: 0,
+      owner: 1,
+      walker: 2,
+    }
+    return roleOrder[a.role] - roleOrder[b.role] || a.name.localeCompare(b.name)
+  })
   const [email, setEmail] = useState('sam@example.com')
   const [password, setPassword] = useState('demo')
   const [name, setName] = useState('')
@@ -803,7 +810,7 @@ function AuthPanel({
         </button>
       </form>
       <div className="demo-logins">
-        <p>Demo customer account</p>
+        <p>Development login shortcuts</p>
         {demoUsers.map((user) => (
           <button
             key={user.id}
@@ -814,7 +821,7 @@ function AuthPanel({
               onLogin(user.id)
             }}
           >
-            {user.email}
+            {user.name} · {user.role} · {user.email}
           </button>
         ))}
       </div>

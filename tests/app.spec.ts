@@ -35,9 +35,15 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(page.getByRole('heading', { name: /trusted local care/i })).toBeVisible()
   await expect(page.getByText('Owner console')).toHaveCount(0)
   await expect(page.getByText('Walker workflow')).toHaveCount(0)
+  await expect(
+    page.getByRole('button', { name: /owner@waggulous.local/i }),
+  ).toBeVisible()
+  await expect(
+    page.getByRole('button', { name: /walker@waggulous.local/i }),
+  ).toBeVisible()
   await page.screenshot({ path: 'test-results/mobile-landing.png' })
 
-  await page.getByRole('button', { name: 'sam@example.com' }).click()
+  await page.getByRole('button', { name: /sam@example.com/i }).click()
   await expect(
     page.getByRole('heading', { name: /your pets, bookings, and balance/i }),
   ).toBeVisible()
