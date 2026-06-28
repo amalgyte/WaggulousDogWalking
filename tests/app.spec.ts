@@ -83,6 +83,15 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
     .getByLabel('Multi-pet pricing')
     .selectOption('additional-pet-price')
   await walkServiceRow.getByLabel('Rule amount').fill('8')
+  await walkServiceRow
+    .getByLabel('Multi-pet pricing')
+    .selectOption('percent-discount')
+  await walkServiceRow.getByLabel('Rule amount').fill('25')
+  await expect(walkServiceRow.getByLabel('Rule amount')).toHaveValue('25')
+  await walkServiceRow
+    .getByLabel('Multi-pet pricing')
+    .selectOption('additional-pet-price')
+  await walkServiceRow.getByLabel('Rule amount').fill('8')
 
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByLabel('Client name').fill('Nina Verbal')

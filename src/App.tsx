@@ -3295,6 +3295,9 @@ function ServicesPanel({
     multiPetMode: 'none' as MultiPetPricingMode,
     multiPetAmount: '',
   })
+  const [serviceAmountDrafts, setServiceAmountDrafts] = useState<
+    Record<string, string>
+  >({})
 
   function addService(event: FormEvent) {
     event.preventDefault()
@@ -3329,6 +3332,41 @@ function ServicesPanel({
       description: '',
       multiPetMode: 'none',
       multiPetAmount: '',
+    })
+  }
+
+  function updateServiceRuleAmount(service: Service, value: string) {
+    setServiceAmountDrafts((current) => ({
+      ...current,
+      [service.id]: value,
+    }))
+
+    if (value === '') {
+      updateService(setData, service.id, {
+        multiPetPricing: buildMultiPetPricing(
+          service.multiPetPricing?.mode ?? 'none',
+          0,
+        ),
+      })
+      return
+    }
+
+    const amount = Number(value)
+    if (Number.isNaN(amount)) return
+
+    updateService(setData, service.id, {
+      multiPetPricing: buildMultiPetPricing(
+        service.multiPetPricing?.mode ?? 'none',
+        amount,
+      ),
+    })
+  }
+
+  function finishServiceRuleAmountEdit(serviceId: string) {
+    setServiceAmountDrafts((current) => {
+      const next = { ...current }
+      delete next[serviceId]
+      return next
     })
   }
 
@@ -3391,15 +3429,14 @@ function ServicesPanel({
                   type="number"
                   min="0"
                   step="0.5"
-                  value={service.multiPetPricing?.amount ?? 0}
-                  onChange={(event) =>
-                    updateService(setData, service.id, {
-                      multiPetPricing: buildMultiPetPricing(
-                        service.multiPetPricing?.mode ?? 'none',
-                        Number(event.target.value),
-                      ),
-                    })
+                  value={
+                    serviceAmountDrafts[service.id] ??
+                    String(service.multiPetPricing?.amount ?? 0)
                   }
+                  onChange={(event) =>
+                    updateServiceRuleAmount(service, event.target.value)
+                  }
+                  onBlur={() => finishServiceRuleAmountEdit(service.id)}
                 />
               </label>
               <label className="toggle-label">
