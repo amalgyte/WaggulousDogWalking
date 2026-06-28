@@ -8,7 +8,7 @@ Mobile-first PWA MVP for a dog walking and pet sitting business.
 - Installable PWA metadata and service worker app-shell caching.
 - Local demo authentication with customer, owner, and walker roles.
 - Customer pet profiles with named pets, details, care notes, and uploaded pictures.
-- Service request flow for walking or pet sitting with visible prices.
+- Service request flow for walking or pet sitting with visible prices, request confirmation, and current request/assigned appointment lists.
 - Customer money view showing owed totals and historical transactions only.
 - Owner console for approving or declining bookings, assigning walkers, maintaining services/prices, and registering staff.
 - Staff records with name, address, phone, email, avatar, login credentials, and owner-controlled self-assignment permission.

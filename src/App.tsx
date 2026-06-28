@@ -2100,6 +2100,7 @@ function BookingRequestPanel({
   pets: Pet[]
 }) {
   const activeServices = data.services.filter((service) => service.active)
+  const today = formatDateInputValue()
   const [draft, setDraft] = useState({
     serviceId: activeServices[0]?.id ?? '',
     petIds: [] as string[],
@@ -2107,8 +2108,21 @@ function BookingRequestPanel({
     time: '',
     notes: '',
   })
+  const [successMessage, setSuccessMessage] = useState('')
   const selectedService = data.services.find(
     (service) => service.id === draft.serviceId,
+  )
+  const customerBookings = data.bookings
+    .filter((booking) => booking.customerId === customer.id)
+    .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
+  const existingRequests = customerBookings.filter(
+    (booking) => booking.status === 'requested',
+  )
+  const assignedFutureAppointments = customerBookings.filter(
+    (booking) =>
+      Boolean(booking.walkerId) &&
+      ['approved', 'in-progress'].includes(booking.status) &&
+      booking.date >= today,
   )
 
   function submit(event: FormEvent) {
@@ -2146,6 +2160,11 @@ function BookingRequestPanel({
         ...data.messages,
       ],
     })
+    setSuccessMessage(
+      `${selectedService.name} request sent for ${formatDate(
+        booking.date,
+      )} at ${booking.time}.`,
+    )
     setDraft({
       serviceId: activeServices[0]?.id ?? '',
       petIds: [],
@@ -2238,6 +2257,42 @@ function BookingRequestPanel({
           Request service
         </button>
       </form>
+      {successMessage && (
+        <p className="form-success" role="status">
+          {successMessage}
+        </p>
+      )}
+      <section className="workspace nested-workspace">
+        <WorkspaceTitle
+          eyebrow="Your requests"
+          title="Existing requests awaiting approval."
+        />
+        {existingRequests.length === 0 ? (
+          <div className="empty-state">
+            <h3>No open requests.</h3>
+            <p>New service requests you submit will appear here.</p>
+          </div>
+        ) : (
+          <BookingList bookings={existingRequests} data={data} />
+        )}
+      </section>
+      <section className="workspace nested-workspace">
+        <WorkspaceTitle
+          eyebrow="Assigned appointments"
+          title="Future appointments with a staff member assigned."
+        />
+        {assignedFutureAppointments.length === 0 ? (
+          <div className="empty-state">
+            <h3>No assigned future appointments.</h3>
+            <p>
+              Approved appointments will appear here once a staff member is
+              assigned.
+            </p>
+          </div>
+        ) : (
+          <BookingList bookings={assignedFutureAppointments} data={data} />
+        )}
+      </section>
     </section>
   )
 }

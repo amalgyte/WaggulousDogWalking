@@ -53,6 +53,14 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.getByLabel('Date').fill(claimableDate)
   await page.getByLabel('Time').fill('10:00')
   await page.getByRole('button', { name: /request service/i }).click()
+  await expect(page.getByRole('status')).toContainText('request sent')
+  await expect(
+    page
+      .locator('section')
+      .filter({ hasText: 'Existing requests awaiting approval.' })
+      .locator('article')
+      .filter({ hasText: 'Bertie' }),
+  ).toContainText('requested')
   await page.getByRole('button', { name: 'Overview' }).click()
   await expect(page.getByText('requested').first()).toBeVisible()
 
