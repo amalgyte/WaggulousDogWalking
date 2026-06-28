@@ -597,6 +597,35 @@ a:focus-visible {
   flex: 1 1 180px;
 }
 
+.payment-controls {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  grid-column: 1 / -1;
+  padding-top: 12px;
+}
+
+.payment-controls > p {
+  margin: 0;
+}
+
+.payment-pending-list {
+  display: grid;
+  gap: 8px;
+}
+
+.pending-payment-row {
+  align-items: center;
+  background: #fff8ea;
+  border: 1px solid #efd9a9;
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px 12px;
+}
+
 .status-badge {
   background: var(--soft);
   border: 1px solid var(--line);
@@ -619,7 +648,8 @@ a:focus-visible {
 }
 
 .status-badge.requested,
-.status-badge.owed {
+.status-badge.owed,
+.status-badge.payment-pending {
   background: #fff4dc;
   border-color: #f3d59c;
   color: #76500f;

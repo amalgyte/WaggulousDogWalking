@@ -111,7 +111,12 @@ type Transaction = {
   date: string
   description: string
   amount: number
-  status: 'owed' | 'paid'
+  status: 'owed' | 'paid' | 'payment-pending'
+  type?: 'charge' | 'payment'
+  method?: 'cash' | 'bank' | 'card' | 'other'
+  recordedById?: string
+  confirmedById?: string
+  createdAt?: string
 }
 
 type Message = {
@@ -331,6 +336,27 @@ function calculateServicePrice(service: Service, petCount: number) {
   }
 
   return Math.max(0, standardTotal * (1 - rule.amount / 100))
+}
+
+function calculateOutstanding(transactions: Transaction[]) {
+  return transactions.reduce((total, transaction) => {
+    if (transaction.status === 'owed') return total + transaction.amount
+    if (transaction.status === 'paid' && transaction.type === 'payment') {
+      return total - transaction.amount
+    }
+    return total
+  }, 0)
+}
+
+function calculateBookingOutstanding(data: AppData, booking: Booking) {
+  return Math.max(
+    0,
+    calculateOutstanding(
+      data.transactions.filter(
+        (transaction) => transaction.bookingId === booking.id,
+      ),
+    ),
+  )
 }
 
 function multiPetPricingLabel(service: Service) {
@@ -897,9 +923,7 @@ function CustomerDashboard({
   const transactions = data.transactions.filter(
     (transaction) => transaction.customerId === user.id,
   )
-  const owed = transactions
-    .filter((transaction) => transaction.status === 'owed')
-    .reduce((total, transaction) => total + transaction.amount, 0)
+  const owed = calculateOutstanding(transactions)
 
   return (
     <div className="dashboard-grid">
@@ -1090,6 +1114,13 @@ function OwnerDashboard({
                       Decline
                     </button>
                   </div>
+                  <PaymentControls
+                    booking={booking}
+                    data={data}
+                    setData={setData}
+                    user={user}
+                    canConfirm
+                  />
                 </article>
               )
             })}
@@ -1307,6 +1338,13 @@ function WalkerDashboard({
                       Returned
                     </button>
                   </div>
+                  <PaymentControls
+                    booking={booking}
+                    data={data}
+                    setData={setData}
+                    user={user}
+                    canConfirm={false}
+                  />
                 </article>
               )
             })}
@@ -3727,6 +3765,153 @@ function BookingList({
   )
 }
 
+function PaymentControls({
+  booking,
+  data,
+  setData,
+  user,
+  canConfirm,
+}: {
+  booking: Booking
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+  user: User
+  canConfirm: boolean
+}) {
+  const [amount, setAmount] = useState('')
+  const [method, setMethod] = useState<Transaction['method']>('cash')
+  const [error, setError] = useState('')
+  const outstanding = calculateBookingOutstanding(data, booking)
+  const pendingPayments = data.transactions.filter(
+    (transaction) =>
+      transaction.bookingId === booking.id &&
+      transaction.status === 'payment-pending',
+  )
+  const canRecord = ['approved', 'in-progress', 'completed'].includes(
+    booking.status,
+  )
+
+  function submit(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+
+    const paymentAmount = Number(amount)
+
+    if (!canRecord || Number.isNaN(paymentAmount) || paymentAmount <= 0) {
+      setError('Enter a valid payment amount.')
+      return
+    }
+
+    if (paymentAmount > outstanding) {
+      setError(`Amount cannot exceed outstanding ${formatMoney(outstanding)}.`)
+      return
+    }
+
+    const isOwner = user.role === 'owner'
+    const payment: Transaction = {
+      id: makeId('t'),
+      bookingId: booking.id,
+      customerId: booking.customerId,
+      date: formatDateInputValue(),
+      description: `${isOwner ? 'Confirmed' : 'Pending'} ${method} payment`,
+      amount: paymentAmount,
+      status: isOwner ? 'paid' : 'payment-pending',
+      type: 'payment',
+      method,
+      recordedById: user.id,
+      confirmedById: isOwner ? user.id : undefined,
+      createdAt: new Date().toISOString(),
+    }
+
+    setData((current) => ({
+      ...current,
+      transactions: [payment, ...current.transactions],
+    }))
+    setAmount('')
+  }
+
+  function confirmPayment(transactionId: string) {
+    setData((current) => ({
+      ...current,
+      transactions: current.transactions.map((transaction) =>
+        transaction.id === transactionId
+          ? {
+              ...transaction,
+              status: 'paid',
+              confirmedById: user.id,
+              description: `Confirmed ${transaction.method ?? 'other'} payment`,
+            }
+          : transaction,
+      ),
+    }))
+  }
+
+  if (!canRecord && pendingPayments.length === 0) return null
+
+  return (
+    <div className="payment-controls">
+      <p className="muted">Outstanding: {formatMoney(outstanding)}</p>
+      {canRecord && outstanding > 0 && (
+        <form className="row-actions" onSubmit={submit}>
+          <label>
+            Payment received
+            <input
+              type="number"
+              min="0"
+              max={outstanding}
+              step="0.5"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder={formatMoney(outstanding)}
+            />
+          </label>
+          <label>
+            Method
+            <select
+              value={method}
+              onChange={(event) =>
+                setMethod(event.target.value as Transaction['method'])
+              }
+            >
+              <option value="cash">Cash</option>
+              <option value="bank">Bank transfer</option>
+              <option value="card">Card</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <button className="button primary" type="submit">
+            <CreditCard size={16} />
+            {user.role === 'owner' ? 'Record payment' : 'Mark received'}
+          </button>
+          {error && <p className="form-error wide">{error}</p>}
+        </form>
+      )}
+      {pendingPayments.length > 0 && (
+        <div className="payment-pending-list">
+          {pendingPayments.map((payment) => (
+            <div className="pending-payment-row" key={payment.id}>
+              <span>
+                Pending {payment.method ?? 'other'} payment ·{' '}
+                {formatMoney(payment.amount)}
+              </span>
+              {canConfirm && (
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick={() => confirmPayment(payment.id)}
+                >
+                  <Check size={16} />
+                  Confirm payment
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function approveBooking(
   booking: Booking,
   data: AppData,
@@ -3778,6 +3963,7 @@ function buildApprovalRecords(
       description: `Approved ${service?.name ?? 'service'} for ${petNames}`,
       amount: booking.price,
       status: 'owed' as const,
+      type: 'charge' as const,
     },
     message: {
       id: makeId('m'),

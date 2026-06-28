@@ -173,6 +173,19 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
   ).toContainText('approved')
+  await page
+    .locator('article')
+    .filter({ hasText: 'Bertie' })
+    .getByLabel('Payment received')
+    .fill('5')
+  await page
+    .locator('article')
+    .filter({ hasText: 'Bertie' })
+    .getByRole('button', { name: /mark received/i })
+    .click()
+  await expect(
+    page.locator('article').filter({ hasText: 'Bertie' }),
+  ).toContainText('Pending cash payment')
 
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByLabel('Client name').fill('Casey Phone')
@@ -197,6 +210,17 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
     page.locator('article').filter({ hasText: 'Rolo' }),
   ).toContainText('approved')
 
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'owner@waggulous.local')
+  await page
+    .locator('article')
+    .filter({ hasText: 'Bertie' })
+    .getByRole('button', { name: /confirm payment/i })
+    .click()
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await page.getByRole('button', { name: 'Money' }).click()
+  await expect(page.getByText('£21.00')).toBeVisible()
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'owner@waggulous.local')
   await page.getByRole('button', { name: 'Staff' }).click()
