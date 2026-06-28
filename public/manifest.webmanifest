@@ -1,7 +1,7 @@
 {
   "name": "Waggulous Pet Care",
   "short_name": "Waggulous",
-  "description": "Dog walking and pet sitting bookings with pets, approvals, payments summary, messaging, and pickup logs.",
+  "description": "Dog walking and pet sitting bookings for pet owners with pet profiles, clear prices, care updates, messaging, and money visibility.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
