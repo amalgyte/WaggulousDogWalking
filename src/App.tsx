@@ -1363,6 +1363,23 @@ function ClientBookingPanel({
     phone: '',
     address: '',
   })
+  const [clientPetDraft, setClientPetDraft] = useState({
+    name: '',
+    species: 'Dog',
+    breed: '',
+    age: '',
+    notes: '',
+  })
+  const [clientPets, setClientPets] = useState<
+    {
+      id: string
+      name: string
+      species: string
+      breed: string
+      age: string
+      notes: string
+    }[]
+  >([])
   const [petDraft, setPetDraft] = useState({
     selectedPetIds: [] as string[],
     name: '',
@@ -1390,6 +1407,38 @@ function ClientBookingPanel({
     (service) => service.id === bookingDraft.serviceId,
   )
 
+  function resetClientPetDraft() {
+    setClientPetDraft({
+      name: '',
+      species: 'Dog',
+      breed: '',
+      age: '',
+      notes: '',
+    })
+  }
+
+  function addClientPet() {
+    setError('')
+
+    if (!clientPetDraft.name.trim()) {
+      setError('Pet name is required before adding it to the client.')
+      return
+    }
+
+    setClientPets((current) => [
+      ...current,
+      {
+        id: makeId('draft-p'),
+        name: clientPetDraft.name.trim(),
+        species: clientPetDraft.species.trim() || 'Pet',
+        breed: clientPetDraft.breed.trim(),
+        age: clientPetDraft.age.trim(),
+        notes: clientPetDraft.notes.trim(),
+      },
+    ])
+    resetClientPetDraft()
+  }
+
   function saveClient(event: FormEvent) {
     event.preventDefault()
     setError('')
@@ -1415,6 +1464,21 @@ function ClientBookingPanel({
       return
     }
 
+    const petsToSave = [
+      ...clientPets,
+      ...(clientPetDraft.name.trim()
+        ? [
+            {
+              id: makeId('draft-p'),
+              name: clientPetDraft.name.trim(),
+              species: clientPetDraft.species.trim() || 'Pet',
+              breed: clientPetDraft.breed.trim(),
+              age: clientPetDraft.age.trim(),
+              notes: clientPetDraft.notes.trim(),
+            },
+          ]
+        : []),
+    ]
     const newClient: User = {
       id: makeId('u'),
       name: clientDraft.name.trim(),
@@ -1424,14 +1488,28 @@ function ClientBookingPanel({
       phone: clientDraft.phone.trim(),
       address: clientDraft.address.trim(),
     }
+    const newPets: Pet[] = petsToSave.map((pet) => ({
+      id: makeId('p'),
+      ownerId: newClient.id,
+      name: pet.name,
+      species: pet.species,
+      breed: pet.breed,
+      age: pet.age,
+      notes: pet.notes,
+    }))
 
     setData((current) => ({
       ...current,
       users: [...current.users, newClient],
+      pets: [...current.pets, ...newPets],
     }))
     setSelectedClientId(newClient.id)
     setPanelTab('appointment')
-    setSuccessMessage(`${newClient.name} saved. Add an appointment next.`)
+    setSuccessMessage(
+      `${newClient.name} saved. Add an appointment next.${
+        newPets.length ? ` ${newPets.length} pet saved.` : ''
+      }`,
+    )
     setClientDraft({
       name: '',
       email: '',
@@ -1439,8 +1517,10 @@ function ClientBookingPanel({
       phone: '',
       address: '',
     })
+    setClientPets([])
+    resetClientPetDraft()
     setPetDraft({
-      selectedPetIds: [],
+      selectedPetIds: newPets.map((pet) => pet.id),
       name: '',
       species: 'Dog',
       breed: '',
@@ -1630,6 +1710,90 @@ function ClientBookingPanel({
               placeholder="Home address"
             />
           </label>
+          <section className="wide inline-section">
+            <h3>Pets</h3>
+            {clientPets.length > 0 && (
+              <div className="pet-mini-list">
+                {clientPets.map((pet) => (
+                  <span key={pet.id}>
+                    <PawPrint size={14} />
+                    {pet.name}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="form-grid compact-grid">
+              <label>
+                Pet name
+                <input
+                  value={clientPetDraft.name}
+                  onChange={(event) =>
+                    setClientPetDraft({
+                      ...clientPetDraft,
+                      name: event.target.value,
+                    })
+                  }
+                  placeholder="Mabel"
+                />
+              </label>
+              <label>
+                Species
+                <input
+                  value={clientPetDraft.species}
+                  onChange={(event) =>
+                    setClientPetDraft({
+                      ...clientPetDraft,
+                      species: event.target.value,
+                    })
+                  }
+                  placeholder="Dog"
+                />
+              </label>
+              <label>
+                Breed
+                <input
+                  value={clientPetDraft.breed}
+                  onChange={(event) =>
+                    setClientPetDraft({
+                      ...clientPetDraft,
+                      breed: event.target.value,
+                    })
+                  }
+                  placeholder="Cocker Spaniel"
+                />
+              </label>
+              <label>
+                Age
+                <input
+                  value={clientPetDraft.age}
+                  onChange={(event) =>
+                    setClientPetDraft({
+                      ...clientPetDraft,
+                      age: event.target.value,
+                    })
+                  }
+                  placeholder="4"
+                />
+              </label>
+              <label className="wide">
+                Pet notes
+                <textarea
+                  value={clientPetDraft.notes}
+                  onChange={(event) =>
+                    setClientPetDraft({
+                      ...clientPetDraft,
+                      notes: event.target.value,
+                    })
+                  }
+                  placeholder="Harness, feeding, temperament, medication, vet notes"
+                />
+              </label>
+              <button className="button ghost" type="button" onClick={addClientPet}>
+                <Plus size={16} />
+                Add another pet
+              </button>
+            </div>
+          </section>
           {error && <p className="form-error wide">{error}</p>}
           {successMessage && (
             <p className="form-success wide" role="status">
