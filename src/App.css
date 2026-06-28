@@ -579,6 +579,12 @@ a:focus-visible {
   gap: 12px;
 }
 
+.slot-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .booking-row,
 .service-admin-row,
 .message-row {

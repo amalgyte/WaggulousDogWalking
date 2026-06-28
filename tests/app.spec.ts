@@ -58,8 +58,8 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.getByRole('button', { name: 'Request' }).click()
   await page.getByLabel('Service').selectOption('s-pop-in')
   await page.getByRole('checkbox', { name: 'Bertie' }).check()
-  await page.getByLabel('Date').fill(claimableDate)
-  await page.getByLabel('Time').fill('10:00')
+  await page.getByLabel('Date', { exact: true }).fill(claimableDate)
+  await page.getByLabel('Available slot').selectOption('slot-pop-in-daily')
   await page.getByRole('button', { name: /request service/i }).click()
   await expect(page.getByRole('status')).toContainText('request sent')
   await expect(
@@ -114,8 +114,8 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(page.locator('form select').first()).toContainText('Nina Verbal')
   await expect(page.getByLabel('Scout')).toBeChecked()
   await expect(page.getByLabel('Daisy')).toBeChecked()
-  await page.getByLabel('Date').fill(todayDate)
-  await page.getByLabel('Time').fill('14:30')
+  await page.getByLabel('Date', { exact: true }).fill(todayDate)
+  await page.getByLabel('Time', { exact: true }).fill('14:30')
   await page.getByLabel('Staff assignment').selectOption('u-walker')
   await page.getByRole('button', { name: /add approved booking/i }).click()
   await expect(page.getByRole('status')).toContainText(
@@ -199,8 +199,8 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(page.getByRole('status')).toContainText('1 pet saved.')
   await expect(page.locator('form select').first()).toContainText('Casey Phone')
   await expect(page.getByLabel('Rolo')).toBeChecked()
-  await page.getByLabel('Date').fill(todayDate)
-  await page.getByLabel('Time').fill('15:45')
+  await page.getByLabel('Date', { exact: true }).fill(todayDate)
+  await page.getByLabel('Time', { exact: true }).fill('15:45')
   await page.getByRole('button', { name: /add approved booking/i }).click()
   await expect(page.getByRole('status')).toContainText(
     'Approved 30 minute walk booking added for Casey Phone',

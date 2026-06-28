@@ -89,13 +89,26 @@ type Service = {
   }
 }
 
+type ServiceSlot = {
+  id: string
+  serviceId: string
+  label: string
+  days: number[]
+  startTime: string
+  endTime: string
+  capacity: number
+  active: boolean
+}
+
 type Booking = {
   id: string
   customerId: string
   petIds: string[]
   serviceId: string
+  slotId?: string
   date: string
   time: string
+  endTime?: string
   notes: string
   status: BookingStatus
   price: number
@@ -132,6 +145,7 @@ type AppData = {
   users: User[]
   pets: Pet[]
   services: Service[]
+  serviceSlots: ServiceSlot[]
   bookings: Booking[]
   transactions: Transaction[]
   messages: Message[]
@@ -139,6 +153,15 @@ type AppData = {
 
 const storageKey = 'waggulous-mvp-data'
 const sessionKey = 'waggulous-session-user'
+const dayOptions = [
+  ['0', 'Sun'],
+  ['1', 'Mon'],
+  ['2', 'Tue'],
+  ['3', 'Wed'],
+  ['4', 'Thu'],
+  ['5', 'Fri'],
+  ['6', 'Sat'],
+] as const
 
 const seedData: AppData = {
   users: [
@@ -237,6 +260,48 @@ const seedData: AppData = {
       active: true,
     },
   ],
+  serviceSlots: [
+    {
+      id: 'slot-walk-early',
+      serviceId: 's-walk-30',
+      label: 'Early morning walk',
+      days: [1, 2, 3, 4, 5],
+      startTime: '07:00',
+      endTime: '08:00',
+      capacity: 4,
+      active: true,
+    },
+    {
+      id: 'slot-walk-lunch',
+      serviceId: 's-walk-30',
+      label: 'Lunchtime walk',
+      days: [2, 4],
+      startTime: '12:00',
+      endTime: '13:00',
+      capacity: 4,
+      active: true,
+    },
+    {
+      id: 'slot-walk-evening',
+      serviceId: 's-walk-30',
+      label: 'Evening walk',
+      days: [1, 2, 3, 4, 5],
+      startTime: '18:00',
+      endTime: '19:00',
+      capacity: 4,
+      active: true,
+    },
+    {
+      id: 'slot-pop-in-daily',
+      serviceId: 's-pop-in',
+      label: 'Pet sitting pop-in window',
+      days: [0, 1, 2, 3, 4, 5, 6],
+      startTime: '10:00',
+      endTime: '12:00',
+      capacity: 3,
+      active: true,
+    },
+  ],
   bookings: [
     {
       id: 'b-1',
@@ -302,7 +367,11 @@ function loadData(): AppData {
   if (!saved) return seedData
 
   try {
-    return JSON.parse(saved) as AppData
+    const parsed = JSON.parse(saved) as AppData
+    return {
+      ...parsed,
+      serviceSlots: parsed.serviceSlots ?? seedData.serviceSlots,
+    }
   } catch {
     return seedData
   }
@@ -397,6 +466,10 @@ function formatDateInputValue(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
+function dayOfWeekFromDateValue(dateValue: string) {
+  return new Date(`${dateValue}T12:00:00`).getDay()
+}
+
 function addDaysInputValue(dateValue: string, days: number) {
   const date = new Date(`${dateValue}T12:00:00`)
   date.setDate(date.getDate() + days)
@@ -434,8 +507,98 @@ function formatDateTime(value?: string) {
   }).format(new Date(value))
 }
 
+function formatBookingTime(booking: Booking) {
+  return booking.endTime
+    ? `${booking.time}-${booking.endTime}`
+    : booking.time
+}
+
 function statusLabel(status: BookingStatus) {
   return status.replace('-', ' ')
+}
+
+function serviceSlotLabel(slot: ServiceSlot) {
+  return `${slot.label} · ${slot.startTime}-${slot.endTime}`
+}
+
+function isActiveBookingForCapacity(booking: Booking) {
+  return ['requested', 'approved', 'in-progress'].includes(booking.status)
+}
+
+function slotAppliesToDate(slot: ServiceSlot, dateValue: string) {
+  return slot.active && slot.days.includes(dayOfWeekFromDateValue(dateValue))
+}
+
+function timeFallsWithinSlot(time: string, slot: ServiceSlot) {
+  return time >= slot.startTime && time < slot.endTime
+}
+
+function bookingOccupiesSlot(booking: Booking, slot: ServiceSlot) {
+  return (
+    booking.slotId === slot.id ||
+    (!booking.slotId && timeFallsWithinSlot(booking.time, slot))
+  )
+}
+
+function getSlotUsage(data: AppData, slot: ServiceSlot, dateValue: string) {
+  return data.bookings.filter(
+    (booking) =>
+      booking.serviceId === slot.serviceId &&
+      booking.date === dateValue &&
+      isActiveBookingForCapacity(booking) &&
+      bookingOccupiesSlot(booking, slot),
+  ).length
+}
+
+function getAvailableServiceSlots(
+  data: AppData,
+  serviceId: string,
+  dateValue: string,
+) {
+  if (!dateValue) return []
+
+  return data.serviceSlots
+    .filter(
+      (slot) =>
+        slot.serviceId === serviceId &&
+        slotAppliesToDate(slot, dateValue) &&
+        getSlotUsage(data, slot, dateValue) < slot.capacity,
+    )
+    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+}
+
+function validateSlotBooking(
+  data: AppData,
+  slot: ServiceSlot | undefined,
+  dateValue: string,
+) {
+  if (!slot) return 'Choose an available slot.'
+  if (!slotAppliesToDate(slot, dateValue)) {
+    return 'That slot is not available on the selected date.'
+  }
+  if (getSlotUsage(data, slot, dateValue) >= slot.capacity) {
+    return 'That slot is already full.'
+  }
+  return ''
+}
+
+function validateManualBookingTime(
+  data: AppData,
+  serviceId: string,
+  dateValue: string,
+  time: string,
+) {
+  const clashingFullSlot = data.serviceSlots.find(
+    (slot) =>
+      slot.serviceId === serviceId &&
+      slotAppliesToDate(slot, dateValue) &&
+      timeFallsWithinSlot(time, slot) &&
+      getSlotUsage(data, slot, dateValue) >= slot.capacity,
+  )
+
+  return clashingFullSlot
+    ? `${clashingFullSlot.label} is already full for ${formatDate(dateValue)}.`
+    : ''
 }
 
 function formatAvailabilityWindow(holiday: StaffHoliday) {
@@ -1051,7 +1214,7 @@ function OwnerDashboard({
                     </span>
                     <h3>{service?.name ?? 'Unknown service'}</h3>
                     <p>
-                      {formatDate(booking.date)} at {booking.time} ·{' '}
+                      {formatDate(booking.date)} at {formatBookingTime(booking)} ·{' '}
                       {formatMoney(booking.price)}
                     </p>
                     <p className="muted">
@@ -1290,7 +1453,7 @@ function WalkerDashboard({
                     </span>
                     <h3>{service?.name}</h3>
                     <p>
-                      {formatDate(booking.date)} at {booking.time} ·{' '}
+                      {formatDate(booking.date)} at {formatBookingTime(booking)} ·{' '}
                       {customer?.name}
                     </p>
                     <div className="pet-mini-list">
@@ -1393,7 +1556,7 @@ function WalkerDashboard({
                         </span>
                         <h3>{service?.name ?? 'Unknown service'}</h3>
                         <p>
-                          {formatDate(booking.date)} at {booking.time} ·{' '}
+                          {formatDate(booking.date)} at {formatBookingTime(booking)} ·{' '}
                           {customer?.name}
                         </p>
                         <p className="muted">
@@ -1486,6 +1649,8 @@ function ClientBookingPanel({
   })
   const [bookingDraft, setBookingDraft] = useState({
     serviceId: activeServices[0]?.id ?? '',
+    scheduleMode: 'manual' as 'slot' | 'manual',
+    slotId: '',
     date: formatDateInputValue(),
     time: '',
     notes: '',
@@ -1507,6 +1672,9 @@ function ClientBookingPanel({
   const appointmentPrice = selectedService
     ? calculateServicePrice(selectedService, appointmentPetCount)
     : 0
+  const appointmentSlots = selectedService
+    ? getAvailableServiceSlots(data, selectedService.id, bookingDraft.date)
+    : []
 
   function resetClientPetDraft() {
     setClientPetDraft({
@@ -1640,8 +1808,8 @@ function ClientBookingPanel({
       return
     }
 
-    if (!selectedService || !bookingDraft.date || !bookingDraft.time) {
-      setError('Service, date, and time are required.')
+    if (!selectedService || !bookingDraft.date) {
+      setError('Service and date are required.')
       return
     }
 
@@ -1652,6 +1820,35 @@ function ClientBookingPanel({
 
     const actorWalkerId =
       user.role === 'walker' ? user.id : bookingDraft.walkerId || undefined
+    const selectedSlot = data.serviceSlots.find(
+      (slot) => slot.id === bookingDraft.slotId,
+    )
+
+    if (bookingDraft.scheduleMode === 'slot') {
+      const slotError = validateSlotBooking(
+        data,
+        selectedSlot,
+        bookingDraft.date,
+      )
+      if (slotError) {
+        setError(slotError)
+        return
+      }
+    } else if (!bookingDraft.time) {
+      setError('Time is required for a manual appointment.')
+      return
+    } else {
+      const clashError = validateManualBookingTime(
+        data,
+        selectedService.id,
+        bookingDraft.date,
+        bookingDraft.time,
+      )
+      if (clashError) {
+        setError(clashError)
+        return
+      }
+    }
 
     setData((current) => {
       const customer = current.users.find(
@@ -1681,8 +1878,17 @@ function ClientBookingPanel({
         customerId: customer.id,
         petIds,
         serviceId: selectedService.id,
+        slotId:
+          bookingDraft.scheduleMode === 'slot' ? selectedSlot?.id : undefined,
         date: bookingDraft.date,
-        time: bookingDraft.time,
+        time:
+          bookingDraft.scheduleMode === 'slot' && selectedSlot
+            ? selectedSlot.startTime
+            : bookingDraft.time,
+        endTime:
+          bookingDraft.scheduleMode === 'slot' && selectedSlot
+            ? selectedSlot.endTime
+            : undefined,
         notes: bookingDraft.notes.trim(),
         status: 'approved',
         price: calculateServicePrice(selectedService, petIds.length),
@@ -1715,6 +1921,8 @@ function ClientBookingPanel({
     })
     setBookingDraft({
       serviceId: activeServices[0]?.id ?? '',
+      scheduleMode: 'manual',
+      slotId: '',
       date: formatDateInputValue(),
       time: '',
       notes: '',
@@ -2010,11 +2218,12 @@ function ClientBookingPanel({
             <select
               value={bookingDraft.serviceId}
               onChange={(event) =>
-                setBookingDraft({
-                  ...bookingDraft,
-                  serviceId: event.target.value,
-                })
-              }
+              setBookingDraft({
+                ...bookingDraft,
+                serviceId: event.target.value,
+                slotId: '',
+              })
+            }
             >
               {activeServices.map((service) => (
                 <option key={service.id} value={service.id}>
@@ -2045,25 +2254,74 @@ function ClientBookingPanel({
             </label>
           )}
           <label>
+            Schedule type
+            <select
+              value={bookingDraft.scheduleMode}
+              onChange={(event) =>
+                setBookingDraft({
+                  ...bookingDraft,
+                  scheduleMode: event.target.value as 'slot' | 'manual',
+                  slotId: '',
+                  time: '',
+                })
+              }
+            >
+              <option value="manual">Manual time</option>
+              <option value="slot">Configured slot</option>
+            </select>
+          </label>
+          <label>
             Date
             <input
               type="date"
               value={bookingDraft.date}
               onChange={(event) =>
-                setBookingDraft({ ...bookingDraft, date: event.target.value })
+                setBookingDraft({
+                  ...bookingDraft,
+                  date: event.target.value,
+                  slotId: '',
+                })
               }
             />
           </label>
-          <label>
-            Time
-            <input
-              type="time"
-              value={bookingDraft.time}
-              onChange={(event) =>
-                setBookingDraft({ ...bookingDraft, time: event.target.value })
-              }
-            />
-          </label>
+          {bookingDraft.scheduleMode === 'slot' ? (
+            <label>
+              Available slot
+              <select
+                value={bookingDraft.slotId}
+                onChange={(event) =>
+                  setBookingDraft({
+                    ...bookingDraft,
+                    slotId: event.target.value,
+                  })
+                }
+              >
+                <option value="">Choose available slot</option>
+                {appointmentSlots.map((slot) => (
+                  <option key={slot.id} value={slot.id}>
+                    {serviceSlotLabel(slot)} ·{' '}
+                    {slot.capacity - getSlotUsage(data, slot, bookingDraft.date)}{' '}
+                    space
+                    {slot.capacity - getSlotUsage(data, slot, bookingDraft.date) ===
+                    1
+                      ? ''
+                      : 's'}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <label>
+              Time
+              <input
+                type="time"
+                value={bookingDraft.time}
+                onChange={(event) =>
+                  setBookingDraft({ ...bookingDraft, time: event.target.value })
+                }
+              />
+            </label>
+          )}
           <label className="wide">
             Booking notes
             <textarea
@@ -2403,7 +2661,7 @@ function StaffAdminPanel({
                       </span>
                       <h3>{service?.name ?? 'Unknown service'}</h3>
                       <p>
-                        {formatDate(booking.date)} at {booking.time} ·{' '}
+                        {formatDate(booking.date)} at {formatBookingTime(booking)} ·{' '}
                         {customer?.name}
                       </p>
                       <p className="muted">
@@ -3062,9 +3320,10 @@ function BookingRequestPanel({
     serviceId: activeServices[0]?.id ?? '',
     petIds: [] as string[],
     date: '',
-    time: '',
+    slotId: '',
     notes: '',
   })
+  const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const selectedService = data.services.find(
     (service) => service.id === draft.serviceId,
@@ -3072,6 +3331,9 @@ function BookingRequestPanel({
   const requestPrice = selectedService
     ? calculateServicePrice(selectedService, draft.petIds.length)
     : 0
+  const availableSlots = selectedService
+    ? getAvailableServiceSlots(data, selectedService.id, draft.date)
+    : []
   const customerBookings = data.bookings
     .filter((booking) => booking.customerId === customer.id)
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
@@ -3087,7 +3349,21 @@ function BookingRequestPanel({
 
   function submit(event: FormEvent) {
     event.preventDefault()
-    if (!selectedService || draft.petIds.length === 0 || !draft.date || !draft.time) {
+    setError('')
+
+    const selectedSlot = data.serviceSlots.find(
+      (slot) => slot.id === draft.slotId,
+    )
+    const slotError = validateSlotBooking(data, selectedSlot, draft.date)
+
+    if (
+      !selectedService ||
+      !selectedSlot ||
+      draft.petIds.length === 0 ||
+      !draft.date ||
+      slotError
+    ) {
+      setError(slotError || 'Choose pets, date, and an available slot.')
       return
     }
 
@@ -3096,8 +3372,10 @@ function BookingRequestPanel({
       customerId: customer.id,
       petIds: draft.petIds,
       serviceId: selectedService.id,
+      slotId: selectedSlot.id,
       date: draft.date,
-      time: draft.time,
+      time: selectedSlot.startTime,
+      endTime: selectedSlot.endTime,
       notes: draft.notes.trim(),
       status: 'requested',
       price: calculateServicePrice(selectedService, draft.petIds.length),
@@ -3114,7 +3392,7 @@ function BookingRequestPanel({
           recipientId: 'u-owner',
           body: `New ${selectedService.name} request for ${formatDate(
             booking.date,
-          )} at ${booking.time}.`,
+          )} at ${formatBookingTime(booking)}.`,
           createdAt: new Date().toISOString(),
         },
         ...data.messages,
@@ -3123,13 +3401,13 @@ function BookingRequestPanel({
     setSuccessMessage(
       `${selectedService.name} request sent for ${formatDate(
         booking.date,
-      )} at ${booking.time}.`,
+      )} at ${formatBookingTime(booking)}.`,
     )
     setDraft({
       serviceId: activeServices[0]?.id ?? '',
       petIds: [],
       date: '',
-      time: '',
+      slotId: '',
       notes: '',
     })
   }
@@ -3146,7 +3424,7 @@ function BookingRequestPanel({
           <select
             value={draft.serviceId}
             onChange={(event) =>
-              setDraft({ ...draft, serviceId: event.target.value })
+              setDraft({ ...draft, serviceId: event.target.value, slotId: '' })
             }
           >
             {activeServices.map((service) => (
@@ -3180,19 +3458,31 @@ function BookingRequestPanel({
             type="date"
             value={draft.date}
             onChange={(event) =>
-              setDraft({ ...draft, date: event.target.value })
+              setDraft({ ...draft, date: event.target.value, slotId: '' })
             }
           />
         </label>
         <label>
-          Time
-          <input
-            type="time"
-            value={draft.time}
+          Available slot
+          <select
+            value={draft.slotId}
             onChange={(event) =>
-              setDraft({ ...draft, time: event.target.value })
+              setDraft({ ...draft, slotId: event.target.value })
             }
-          />
+          >
+            <option value="">
+              {draft.date ? 'Choose available slot' : 'Select a date first'}
+            </option>
+            {availableSlots.map((slot) => (
+              <option key={slot.id} value={slot.id}>
+                {serviceSlotLabel(slot)} ·{' '}
+                {slot.capacity - getSlotUsage(data, slot, draft.date)} space
+                {slot.capacity - getSlotUsage(data, slot, draft.date) === 1
+                  ? ''
+                  : 's'}
+              </option>
+            ))}
+          </select>
         </label>
         <label className="wide">
           Notes
@@ -3217,6 +3507,7 @@ function BookingRequestPanel({
           Request service
         </button>
       </form>
+      {error && <p className="form-error">{error}</p>}
       {successMessage && (
         <p className="form-success" role="status">
           {successMessage}
@@ -3343,6 +3634,15 @@ function ServicesPanel({
   const [serviceAmountDrafts, setServiceAmountDrafts] = useState<
     Record<string, string>
   >({})
+  const [slotDraft, setSlotDraft] = useState({
+    serviceId: data.services[0]?.id ?? '',
+    label: '',
+    days: ['1', '2', '3', '4', '5'],
+    startTime: '',
+    endTime: '',
+    capacity: '1',
+  })
+  const [slotError, setSlotError] = useState('')
 
   function addService(event: FormEvent) {
     event.preventDefault()
@@ -3415,6 +3715,54 @@ function ServicesPanel({
     })
   }
 
+  function addServiceSlot(event: FormEvent) {
+    event.preventDefault()
+    setSlotError('')
+
+    const capacity = Number(slotDraft.capacity)
+
+    if (
+      !slotDraft.serviceId ||
+      !slotDraft.label.trim() ||
+      slotDraft.days.length === 0 ||
+      !slotDraft.startTime ||
+      !slotDraft.endTime ||
+      slotDraft.startTime >= slotDraft.endTime ||
+      Number.isNaN(capacity) ||
+      capacity < 1
+    ) {
+      setSlotError(
+        'Choose service, label, at least one day, start/end times, and capacity.',
+      )
+      return
+    }
+
+    setData((current) => ({
+      ...current,
+      serviceSlots: [
+        ...current.serviceSlots,
+        {
+          id: makeId('slot'),
+          serviceId: slotDraft.serviceId,
+          label: slotDraft.label.trim(),
+          days: slotDraft.days.map(Number),
+          startTime: slotDraft.startTime,
+          endTime: slotDraft.endTime,
+          capacity,
+          active: true,
+        },
+      ],
+    }))
+    setSlotDraft({
+      serviceId: data.services[0]?.id ?? '',
+      label: '',
+      days: ['1', '2', '3', '4', '5'],
+      startTime: '',
+      endTime: '',
+      capacity: '1',
+    })
+  }
+
   return (
     <section className="workspace">
       <WorkspaceTitle
@@ -3431,6 +3779,33 @@ function ServicesPanel({
               </p>
               <p className="muted">{service.description}</p>
               <p className="muted">{multiPetPricingLabel(service)}</p>
+              <div className="slot-list">
+                {data.serviceSlots
+                  .filter((slot) => slot.serviceId === service.id)
+                  .map((slot) => (
+                    <label className="toggle-label" key={slot.id}>
+                      <input
+                        type="checkbox"
+                        checked={slot.active}
+                        onChange={(event) =>
+                          setData((current) => ({
+                            ...current,
+                            serviceSlots: current.serviceSlots.map((candidate) =>
+                              candidate.id === slot.id
+                                ? { ...candidate, active: event.target.checked }
+                                : candidate,
+                            ),
+                          }))
+                        }
+                      />
+                      {serviceSlotLabel(slot)} ·{' '}
+                      {slot.days
+                        .map((day) => dayOptions.find(([id]) => Number(id) === day)?.[1])
+                        .join(', ')}{' '}
+                      · {slot.capacity} space{slot.capacity === 1 ? '' : 's'}
+                    </label>
+                  ))}
+              </div>
             </div>
             <div className="service-admin-controls">
               <label>
@@ -3593,6 +3968,92 @@ function ServicesPanel({
           Add service
         </button>
       </form>
+      <form className="form-grid" onSubmit={addServiceSlot}>
+        <WorkspaceTitle
+          eyebrow="Service slots"
+          title="Define bookable weekly slots for customer requests."
+        />
+        <label>
+          Service
+          <select
+            value={slotDraft.serviceId}
+            onChange={(event) =>
+              setSlotDraft({ ...slotDraft, serviceId: event.target.value })
+            }
+          >
+            {data.services.map((service) => (
+              <option key={service.id} value={service.id}>
+                {service.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Slot label
+          <input
+            value={slotDraft.label}
+            onChange={(event) =>
+              setSlotDraft({ ...slotDraft, label: event.target.value })
+            }
+            placeholder="Early morning walk"
+          />
+        </label>
+        <fieldset className="wide checkbox-set">
+          <legend>Days</legend>
+          {dayOptions.map(([id, label]) => (
+            <label key={id}>
+              <input
+                type="checkbox"
+                checked={slotDraft.days.includes(id)}
+                onChange={(event) => {
+                  const days = event.target.checked
+                    ? [...slotDraft.days, id].sort()
+                    : slotDraft.days.filter((day) => day !== id)
+                  setSlotDraft({ ...slotDraft, days })
+                }}
+              />
+              {label}
+            </label>
+          ))}
+        </fieldset>
+        <label>
+          Start time
+          <input
+            type="time"
+            value={slotDraft.startTime}
+            onChange={(event) =>
+              setSlotDraft({ ...slotDraft, startTime: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          End time
+          <input
+            type="time"
+            value={slotDraft.endTime}
+            onChange={(event) =>
+              setSlotDraft({ ...slotDraft, endTime: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Spaces
+          <input
+            type="number"
+            min="1"
+            step="1"
+            value={slotDraft.capacity}
+            onChange={(event) =>
+              setSlotDraft({ ...slotDraft, capacity: event.target.value })
+            }
+          />
+        </label>
+        {slotError && <p className="form-error wide">{slotError}</p>}
+        <button className="button primary" type="submit">
+          <Plus size={16} />
+          Add slot
+        </button>
+      </form>
     </section>
   )
 }
@@ -3667,7 +4128,7 @@ function MessagesPanel({
             <option value="">General message</option>
             {data.bookings.map((booking) => (
               <option key={booking.id} value={booking.id}>
-                {formatDate(booking.date)} {booking.time}
+                {formatDate(booking.date)} {formatBookingTime(booking)}
               </option>
             ))}
           </select>
@@ -3705,7 +4166,7 @@ function MessagesPanel({
                 <p>{message.body}</p>
                 {booking && (
                   <p className="muted">
-                    Booking: {formatDate(booking.date)} at {booking.time}
+                    Booking: {formatDate(booking.date)} at {formatBookingTime(booking)}
                   </p>
                 )}
               </div>
@@ -3744,7 +4205,7 @@ function BookingList({
               </span>
               <h3>{service?.name ?? 'Service unavailable'}</h3>
               <p>
-                {formatDate(booking.date)} at {booking.time} ·{' '}
+                {formatDate(booking.date)} at {formatBookingTime(booking)} ·{' '}
                 {formatMoney(booking.price)}
               </p>
               <p className="muted">
