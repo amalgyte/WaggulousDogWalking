@@ -14,9 +14,10 @@ createRoot(document.getElementById('root')!).render(
 
 if ('serviceWorker' in navigator) {
   let refreshing = false
+  const hadController = Boolean(navigator.serviceWorker.controller)
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (refreshing) return
+    if (!hadController || refreshing) return
     refreshing = true
     window.location.reload()
   })
