@@ -10,8 +10,9 @@ Mobile-first PWA MVP for a dog walking and pet sitting business.
 - Customer pet profiles with named pets, details, care notes, and uploaded pictures.
 - Service request flow for walking or pet sitting with visible prices.
 - Customer money view showing owed totals and historical transactions only.
-- Owner console for approving or declining bookings, assigning walkers, and maintaining services/prices.
-- Walker workspace for authorised jobs with pickup and return logging.
+- Owner console for approving or declining bookings, assigning walkers, maintaining services/prices, and registering staff.
+- Staff records with name, address, phone, email, avatar, and login credentials.
+- Staff workspace for authorised jobs, profile maintenance, avatar updates, and holiday/unavailable date management.
 - Booking-linked messaging between roles.
 
 This MVP stores data in browser `localStorage`. Payment account details are deliberately not stored because payments are expected to be handled by an outsourced service.

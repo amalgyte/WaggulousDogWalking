@@ -444,6 +444,15 @@ a:focus-visible {
   padding: 10px 12px;
 }
 
+.form-success {
+  background: #edf9ef;
+  border: 1px solid #c6e8ce;
+  border-radius: 8px;
+  color: #24673a;
+  margin: 0;
+  padding: 10px 12px;
+}
+
 .demo-logins {
   border-top: 1px solid var(--line);
   display: grid;
@@ -594,6 +603,12 @@ a:focus-visible {
   color: #8a2e1b;
 }
 
+.status-badge.cancelled {
+  background: #f2efea;
+  border-color: #ddd2c6;
+  color: #74685f;
+}
+
 .wide {
   grid-column: 1 / -1;
 }
@@ -616,6 +631,57 @@ a:focus-visible {
 }
 
 .pet-photo img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.staff-list {
+  display: grid;
+  gap: 12px;
+}
+
+.staff-row,
+.profile-summary {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
+  display: flex;
+  gap: 14px;
+  padding: 16px;
+}
+
+.staff-row h3,
+.profile-summary h3 {
+  color: var(--ink);
+  margin: 0 0 4px;
+}
+
+.staff-row p,
+.profile-summary p {
+  margin: 0;
+}
+
+.staff-avatar {
+  align-items: center;
+  background: var(--mint);
+  border: 1px solid color-mix(in srgb, var(--mint) 70%, #000 10%);
+  border-radius: 8px;
+  color: var(--forest);
+  display: flex;
+  flex: 0 0 68px;
+  font-family: var(--display);
+  font-size: 1.6rem;
+  font-weight: 900;
+  height: 68px;
+  justify-content: center;
+  overflow: hidden;
+  width: 68px;
+}
+
+.staff-avatar img {
   height: 100%;
   object-fit: cover;
   width: 100%;

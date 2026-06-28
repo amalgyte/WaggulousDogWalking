@@ -57,6 +57,30 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.waitForFunction(() => window.scrollY === 0)
   await page.screenshot({ path: 'test-results/mobile-owner.png' })
 
+  await page.getByRole('button', { name: 'Staff' }).click()
+  await page.getByLabel('Name').fill('Jordan Staff')
+  await page.getByLabel('Email').fill('jordan@waggulous.local')
+  await page.getByLabel('Phone').fill('07700 900333')
+  await page.getByLabel('Address').fill('22 Meadow Lane, Bristol')
+  await page.getByRole('button', { name: /add staff/i }).click()
+  await expect(page.getByRole('heading', { name: 'Jordan Staff' })).toBeVisible()
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'jordan@waggulous.local')
+  await page.getByRole('button', { name: 'Profile' }).click()
+  await page.getByLabel('Phone').fill('07700 900444')
+  await page.getByRole('button', { name: /save profile/i }).click()
+  await expect(page.getByText('Profile saved.')).toBeVisible()
+
+  await page.getByRole('button', { name: 'Holidays' }).click()
+  await page.getByLabel('Start date').fill('2026-08-10')
+  await page.getByLabel('End date').fill('2026-08-12')
+  await page.getByLabel('Reason').fill('Summer holiday')
+  await page.getByRole('button', { name: /add unavailable dates/i }).click()
+  await expect(page.getByText('Summer holiday')).toBeVisible()
+  await page.getByRole('button', { name: /cancel entry/i }).first().click()
+  await expect(page.getByText('cancelled')).toBeVisible()
+
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'walker@waggulous.local')
   await expect(

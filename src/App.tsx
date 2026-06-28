@@ -41,6 +41,18 @@ type User = {
   email: string
   password: string
   role: Role
+  address?: string
+  phone?: string
+  avatar?: string
+  holidays?: StaffHoliday[]
+}
+
+type StaffHoliday = {
+  id: string
+  startDate: string
+  endDate: string
+  reason: string
+  status: 'active' | 'cancelled'
 }
 
 type Pet = {
@@ -118,6 +130,8 @@ const seedData: AppData = {
       email: 'owner@waggulous.local',
       password: 'demo',
       role: 'owner',
+      phone: '07700 900111',
+      address: 'Waggulous HQ, High Street',
     },
     {
       id: 'u-walker',
@@ -125,6 +139,17 @@ const seedData: AppData = {
       email: 'walker@waggulous.local',
       password: 'demo',
       role: 'walker',
+      phone: '07700 900222',
+      address: '14 Park View, Bristol',
+      holidays: [
+        {
+          id: 'h-alex-1',
+          startDate: '2026-07-15',
+          endDate: '2026-07-18',
+          reason: 'Family break',
+          status: 'active',
+        },
+      ],
     },
     {
       id: 'u-customer',
@@ -844,7 +869,9 @@ function OwnerDashboard({
   setData: Dispatch<SetStateAction<AppData>>
   user: User
 }) {
-  const [tab, setTab] = useState<'queue' | 'services' | 'chat'>('queue')
+  const [tab, setTab] = useState<'queue' | 'staff' | 'services' | 'chat'>(
+    'queue',
+  )
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
 
   return (
@@ -853,6 +880,7 @@ function OwnerDashboard({
         active={tab}
         items={[
           ['queue', 'Bookings'],
+          ['staff', 'Staff'],
           ['services', 'Services'],
           ['chat', 'Messages'],
         ]}
@@ -957,6 +985,8 @@ function OwnerDashboard({
 
       {tab === 'services' && <ServicesPanel data={data} setData={setData} />}
 
+      {tab === 'staff' && <StaffAdminPanel data={data} setData={setData} />}
+
       {tab === 'chat' && (
         <MessagesPanel data={data} setData={setData} user={user} />
       )}
@@ -973,6 +1003,7 @@ function WalkerDashboard({
   setData: Dispatch<SetStateAction<AppData>>
   user: User
 }) {
+  const [tab, setTab] = useState<'jobs' | 'profile' | 'holidays'>('jobs')
   const assignedBookings = data.bookings
     .filter(
       (booking) =>
@@ -996,86 +1027,584 @@ function WalkerDashboard({
   return (
     <div className="dashboard-grid">
       <DashboardNav
-        active="jobs"
-        items={[['jobs', 'Jobs']]}
-        onChange={() => undefined}
+        active={tab}
+        items={[
+          ['jobs', 'Jobs'],
+          ['profile', 'Profile'],
+          ['holidays', 'Holidays'],
+        ]}
+        onChange={(value) => setTab(value as typeof tab)}
       />
-      <section className="workspace">
-        <WorkspaceTitle
-          eyebrow="Walker workflow"
-          title="Log pickup and return for authorised pets."
-        />
-        <div className="booking-stack">
-          {assignedBookings.map((booking) => {
-            const service = data.services.find(
-              (candidate) => candidate.id === booking.serviceId,
-            )
-            const customer = data.users.find(
-              (candidate) => candidate.id === booking.customerId,
-            )
-            const pets = data.pets.filter((pet) =>
-              booking.petIds.includes(pet.id),
-            )
+      {tab === 'jobs' && (
+        <section className="workspace">
+          <WorkspaceTitle
+            eyebrow="Walker workflow"
+            title="Log pickup and return for authorised pets."
+          />
+          <div className="booking-stack">
+            {assignedBookings.map((booking) => {
+              const service = data.services.find(
+                (candidate) => candidate.id === booking.serviceId,
+              )
+              const customer = data.users.find(
+                (candidate) => candidate.id === booking.customerId,
+              )
+              const pets = data.pets.filter((pet) =>
+                booking.petIds.includes(pet.id),
+              )
 
-            return (
-              <article className="booking-row" key={booking.id}>
-                <div>
-                  <span className={`status-badge ${booking.status}`}>
-                    {statusLabel(booking.status)}
-                  </span>
-                  <h3>{service?.name}</h3>
-                  <p>
-                    {formatDate(booking.date)} at {booking.time} ·{' '}
-                    {customer?.name}
-                  </p>
-                  <div className="pet-mini-list">
-                    {pets.map((pet) => (
-                      <span key={pet.id}>
-                        <PawPrint size={14} />
-                        {pet.name}
-                      </span>
-                    ))}
+              return (
+                <article className="booking-row" key={booking.id}>
+                  <div>
+                    <span className={`status-badge ${booking.status}`}>
+                      {statusLabel(booking.status)}
+                    </span>
+                    <h3>{service?.name}</h3>
+                    <p>
+                      {formatDate(booking.date)} at {booking.time} ·{' '}
+                      {customer?.name}
+                    </p>
+                    <div className="pet-mini-list">
+                      {pets.map((pet) => (
+                        <span key={pet.id}>
+                          <PawPrint size={14} />
+                          {pet.name}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="muted">
+                      Pickup: {formatDateTime(booking.pickedUpAt)} · Return:{' '}
+                      {formatDateTime(booking.returnedAt)}
+                    </p>
                   </div>
-                  <p className="muted">
-                    Pickup: {formatDateTime(booking.pickedUpAt)} · Return:{' '}
-                    {formatDateTime(booking.returnedAt)}
-                  </p>
-                </div>
-                <div className="row-actions">
-                  <button
-                    className="button primary"
-                    type="button"
-                    disabled={Boolean(booking.pickedUpAt)}
-                    onClick={() =>
-                      stampBooking(setData, booking.id, {
-                        pickedUpAt: new Date().toISOString(),
-                        status: 'in-progress',
-                      })
-                    }
-                  >
-                    <Clock size={16} />
-                    Picked up
-                  </button>
-                  <button
-                    className="button primary"
-                    type="button"
-                    disabled={!booking.pickedUpAt || Boolean(booking.returnedAt)}
-                    onClick={() =>
-                      stampBooking(setData, booking.id, {
-                        returnedAt: new Date().toISOString(),
-                        status: 'completed',
-                      })
-                    }
-                  >
-                    <Check size={16} />
-                    Returned
-                  </button>
-                </div>
-              </article>
-            )
-          })}
+                  <div className="row-actions">
+                    <button
+                      className="button primary"
+                      type="button"
+                      disabled={Boolean(booking.pickedUpAt)}
+                      onClick={() =>
+                        stampBooking(setData, booking.id, {
+                          pickedUpAt: new Date().toISOString(),
+                          status: 'in-progress',
+                        })
+                      }
+                    >
+                      <Clock size={16} />
+                      Picked up
+                    </button>
+                    <button
+                      className="button primary"
+                      type="button"
+                      disabled={
+                        !booking.pickedUpAt || Boolean(booking.returnedAt)
+                      }
+                      onClick={() =>
+                        stampBooking(setData, booking.id, {
+                          returnedAt: new Date().toISOString(),
+                          status: 'completed',
+                        })
+                      }
+                    >
+                      <Check size={16} />
+                      Returned
+                    </button>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {tab === 'profile' && (
+        <StaffProfilePanel data={data} setData={setData} user={user} />
+      )}
+
+      {tab === 'holidays' && (
+        <StaffHolidayPanel data={data} setData={setData} user={user} />
+      )}
+    </div>
+  )
+}
+
+function StaffAdminPanel({
+  data,
+  setData,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+}) {
+  const staff = data.users.filter((candidate) => candidate.role === 'walker')
+  const [error, setError] = useState('')
+  const [draft, setDraft] = useState({
+    name: '',
+    email: '',
+    password: 'demo',
+    phone: '',
+    address: '',
+    avatar: '',
+  })
+
+  function addStaff(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+
+    if (!draft.name.trim() || !draft.email.trim() || !draft.password.trim()) {
+      setError('Name, email, and password are required.')
+      return
+    }
+
+    const emailExists = data.users.some(
+      (candidate) =>
+        candidate.email.toLowerCase() === draft.email.trim().toLowerCase(),
+    )
+
+    if (emailExists) {
+      setError('That email is already registered.')
+      return
+    }
+
+    setData({
+      ...data,
+      users: [
+        ...data.users,
+        {
+          id: makeId('u'),
+          name: draft.name.trim(),
+          email: draft.email.trim(),
+          password: draft.password,
+          role: 'walker',
+          phone: draft.phone.trim(),
+          address: draft.address.trim(),
+          avatar: draft.avatar || undefined,
+          holidays: [],
+        },
+      ],
+    })
+    setDraft({
+      name: '',
+      email: '',
+      password: 'demo',
+      phone: '',
+      address: '',
+      avatar: '',
+    })
+  }
+
+  function handleAvatar(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setDraft((current) => ({
+        ...current,
+        avatar: String(reader.result),
+      }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <section className="workspace">
+      <WorkspaceTitle
+        eyebrow="Staff registry"
+        title="Add staff and keep contact details on file."
+      />
+      <form className="form-grid" onSubmit={addStaff}>
+        <label>
+          Name
+          <input
+            value={draft.name}
+            onChange={(event) =>
+              setDraft({ ...draft, name: event.target.value })
+            }
+            placeholder="Jordan Smith"
+          />
+        </label>
+        <label>
+          Email
+          <input
+            type="email"
+            value={draft.email}
+            onChange={(event) =>
+              setDraft({ ...draft, email: event.target.value })
+            }
+            placeholder="jordan@waggulous.local"
+          />
+        </label>
+        <label>
+          Phone
+          <input
+            value={draft.phone}
+            onChange={(event) =>
+              setDraft({ ...draft, phone: event.target.value })
+            }
+            placeholder="07700 900333"
+          />
+        </label>
+        <label>
+          Temporary password
+          <input
+            value={draft.password}
+            onChange={(event) =>
+              setDraft({ ...draft, password: event.target.value })
+            }
+          />
+        </label>
+        <label className="wide">
+          Address
+          <textarea
+            value={draft.address}
+            onChange={(event) =>
+              setDraft({ ...draft, address: event.target.value })
+            }
+            placeholder="Home address"
+          />
+        </label>
+        <label className="wide">
+          Avatar
+          <input type="file" accept="image/*" onChange={handleAvatar} />
+        </label>
+        {error && <p className="form-error wide">{error}</p>}
+        <button className="button primary" type="submit">
+          <Plus size={16} />
+          Add staff
+        </button>
+      </form>
+
+      <div className="staff-list">
+        {staff.map((member) => {
+          const activeHolidays = (member.holidays ?? []).filter(
+            (holiday) => holiday.status === 'active',
+          )
+
+          return (
+            <article className="staff-row" key={member.id}>
+              <StaffAvatar user={member} />
+              <div>
+                <h3>{member.name}</h3>
+                <p>{member.email}</p>
+                <p className="muted">
+                  {member.phone || 'No phone'} ·{' '}
+                  {member.address || 'No address'}
+                </p>
+                <p className="muted">
+                  {activeHolidays.length
+                    ? `${activeHolidays.length} active holiday/unavailable entry`
+                    : 'No active holiday entries'}
+                </p>
+              </div>
+            </article>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function StaffProfilePanel({
+  data,
+  setData,
+  user,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+  user: User
+}) {
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+  const [draft, setDraft] = useState({
+    name: user.name,
+    email: user.email,
+    password: user.password,
+    phone: user.phone ?? '',
+    address: user.address ?? '',
+    avatar: user.avatar ?? '',
+  })
+
+  function saveProfile(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    setSaved(false)
+
+    if (!draft.name.trim() || !draft.email.trim() || !draft.password.trim()) {
+      setError('Name, email, and password are required.')
+      return
+    }
+
+    const emailExists = data.users.some(
+      (candidate) =>
+        candidate.id !== user.id &&
+        candidate.email.toLowerCase() === draft.email.trim().toLowerCase(),
+    )
+
+    if (emailExists) {
+      setError('That email is already registered.')
+      return
+    }
+
+    setData({
+      ...data,
+      users: data.users.map((candidate) =>
+        candidate.id === user.id
+          ? {
+              ...candidate,
+              name: draft.name.trim(),
+              email: draft.email.trim(),
+              password: draft.password,
+              phone: draft.phone.trim(),
+              address: draft.address.trim(),
+              avatar: draft.avatar || undefined,
+            }
+          : candidate,
+      ),
+    })
+    setSaved(true)
+  }
+
+  function handleAvatar(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setDraft((current) => ({
+        ...current,
+        avatar: String(reader.result),
+      }))
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <section className="workspace">
+      <WorkspaceTitle
+        eyebrow="Staff profile"
+        title="Maintain your contact details and avatar."
+      />
+      <div className="profile-summary">
+        <StaffAvatar user={{ ...user, avatar: draft.avatar, name: draft.name }} />
+        <div>
+          <h3>{draft.name || 'Staff member'}</h3>
+          <p>{draft.email}</p>
+          <p className="muted">{draft.phone || 'No phone on file'}</p>
         </div>
-      </section>
+      </div>
+      <form className="form-grid" onSubmit={saveProfile}>
+        <label>
+          Name
+          <input
+            value={draft.name}
+            onChange={(event) =>
+              setDraft({ ...draft, name: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Email
+          <input
+            type="email"
+            value={draft.email}
+            onChange={(event) =>
+              setDraft({ ...draft, email: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Phone
+          <input
+            value={draft.phone}
+            onChange={(event) =>
+              setDraft({ ...draft, phone: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Password
+          <input
+            value={draft.password}
+            onChange={(event) =>
+              setDraft({ ...draft, password: event.target.value })
+            }
+          />
+        </label>
+        <label className="wide">
+          Address
+          <textarea
+            value={draft.address}
+            onChange={(event) =>
+              setDraft({ ...draft, address: event.target.value })
+            }
+          />
+        </label>
+        <label className="wide">
+          Avatar
+          <input type="file" accept="image/*" onChange={handleAvatar} />
+        </label>
+        {error && <p className="form-error wide">{error}</p>}
+        {saved && <p className="form-success wide">Profile saved.</p>}
+        <button className="button primary" type="submit">
+          Save profile
+        </button>
+      </form>
+    </section>
+  )
+}
+
+function StaffHolidayPanel({
+  data,
+  setData,
+  user,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+  user: User
+}) {
+  const holidays = user.holidays ?? []
+  const [error, setError] = useState('')
+  const [draft, setDraft] = useState({
+    startDate: '',
+    endDate: '',
+    reason: '',
+  })
+
+  function addHoliday(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+
+    if (!draft.startDate || !draft.endDate) {
+      setError('Start and end dates are required.')
+      return
+    }
+
+    if (draft.endDate < draft.startDate) {
+      setError('End date must be on or after the start date.')
+      return
+    }
+
+    const holiday: StaffHoliday = {
+      id: makeId('h'),
+      startDate: draft.startDate,
+      endDate: draft.endDate,
+      reason: draft.reason.trim(),
+      status: 'active',
+    }
+
+    setData({
+      ...data,
+      users: data.users.map((candidate) =>
+        candidate.id === user.id
+          ? {
+              ...candidate,
+              holidays: [holiday, ...(candidate.holidays ?? [])],
+            }
+          : candidate,
+      ),
+    })
+    setDraft({ startDate: '', endDate: '', reason: '' })
+  }
+
+  function cancelHoliday(holidayId: string) {
+    setData({
+      ...data,
+      users: data.users.map((candidate) =>
+        candidate.id === user.id
+          ? {
+              ...candidate,
+              holidays: (candidate.holidays ?? []).map((holiday) =>
+                holiday.id === holidayId
+                  ? { ...holiday, status: 'cancelled' }
+                  : holiday,
+              ),
+            }
+          : candidate,
+      ),
+    })
+  }
+
+  return (
+    <section className="workspace">
+      <WorkspaceTitle
+        eyebrow="Availability"
+        title="Add holidays or unavailable dates."
+      />
+      <form className="form-grid" onSubmit={addHoliday}>
+        <label>
+          Start date
+          <input
+            type="date"
+            value={draft.startDate}
+            onChange={(event) =>
+              setDraft({ ...draft, startDate: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          End date
+          <input
+            type="date"
+            value={draft.endDate}
+            onChange={(event) =>
+              setDraft({ ...draft, endDate: event.target.value })
+            }
+          />
+        </label>
+        <label className="wide">
+          Reason
+          <textarea
+            value={draft.reason}
+            onChange={(event) =>
+              setDraft({ ...draft, reason: event.target.value })
+            }
+            placeholder="Holiday, appointment, or unavailable period"
+          />
+        </label>
+        {error && <p className="form-error wide">{error}</p>}
+        <button className="button primary" type="submit">
+          <Plus size={16} />
+          Add unavailable dates
+        </button>
+      </form>
+
+      <div className="booking-stack">
+        {holidays.map((holiday) => (
+          <article className="booking-row" key={holiday.id}>
+            <div>
+              <span className={`status-badge ${holiday.status}`}>
+                {holiday.status}
+              </span>
+              <h3>
+                {formatDate(holiday.startDate)} to {formatDate(holiday.endDate)}
+              </h3>
+              <p className="muted">{holiday.reason || 'No reason added.'}</p>
+            </div>
+            <div className="row-actions">
+              <button
+                className="button danger"
+                type="button"
+                disabled={holiday.status === 'cancelled'}
+                onClick={() => cancelHoliday(holiday.id)}
+              >
+                <X size={16} />
+                Cancel entry
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function StaffAvatar({ user }: { user: Pick<User, 'avatar' | 'name'> }) {
+  return (
+    <div className="staff-avatar" aria-hidden="true">
+      {user.avatar ? (
+        <img src={user.avatar} alt="" />
+      ) : (
+        <span>{user.name.trim().slice(0, 1).toUpperCase() || 'S'}</span>
+      )}
     </div>
   )
 }
