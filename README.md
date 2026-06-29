@@ -10,7 +10,7 @@ Mobile-first PWA MVP for a dog walking and pet sitting business.
 - Customer pet profiles with named pets, details, care notes, and uploaded pictures.
 - Service request flow for walking or pet sitting with owner-configured available slots, recurring slot requests, visible prices, request confirmation, and current request/assigned appointment lists.
 - Customer money view showing owed totals and historical transactions only.
-- Owner console for approving or declining bookings, assigning walkers, reassigning staff appointments, confirming staff-recorded payments, deciding cancellation chargeability, adding verbal client bookings, maintaining services/prices with configurable weekly slots and multi-pet pricing, and registering staff.
+- Owner console for approving or declining bookings, assigning walkers, reassigning staff appointments, confirming staff-recorded payments, deciding cancellation chargeability, adding verbal client bookings, maintaining services/prices with configurable weekly slots and multi-pet pricing, choosing the site colour theme, and registering staff.
 - Staff records with name, address, phone, email, avatar, login credentials, and owner-controlled self-assignment permission.
 - Staff workspace for authorised jobs, approved-staff verbal client booking, staff-recorded pending payments, next-7-day unassigned request and appointment claiming with approval confirmation, profile maintenance, avatar updates, and all-day or timed start/end availability management.
 - Booking-linked messaging between roles.

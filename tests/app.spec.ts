@@ -94,6 +94,23 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await page.waitForFunction(() => window.scrollY === 0)
   await page.screenshot({ path: 'test-results/mobile-owner.png' })
 
+  await page.getByRole('button', { name: 'Theme' }).click()
+  await page.getByRole('button', { name: /use aqua blue/i }).click()
+  await expect(page.locator('.theme-summary')).toContainText('Aqua blue')
+  const selectedTheme = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return {
+      themeId: data.themeId,
+      accent: getComputedStyle(document.documentElement)
+        .getPropertyValue('--coral')
+        .trim(),
+    }
+  })
+  expect(selectedTheme).toEqual({
+    themeId: 'aqua-blue',
+    accent: '#f0b36f',
+  })
+
   await page.getByRole('button', { name: 'Services' }).click()
   const walkServiceRow = page.locator('article').filter({ hasText: '30 minute walk' })
   await walkServiceRow

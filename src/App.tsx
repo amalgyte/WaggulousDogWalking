@@ -7,6 +7,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  Palette,
   PawPrint,
   Plus,
   ShieldCheck,
@@ -28,6 +29,14 @@ import './App.css'
 
 type Role = 'customer' | 'owner' | 'walker'
 type ServiceType = 'walking' | 'sitting'
+type ThemeId =
+  | 'waggulous'
+  | 'burnt-orange'
+  | 'willow-green'
+  | 'aqua-blue'
+  | 'sunset'
+  | 'sunrise'
+  | 'rose'
 type MultiPetPricingMode =
   | 'none'
   | 'fixed-discount'
@@ -160,6 +169,7 @@ type Message = {
 }
 
 type AppData = {
+  themeId: ThemeId
   users: User[]
   pets: Pet[]
   services: Service[]
@@ -172,6 +182,153 @@ type AppData = {
 
 const storageKey = 'waggulous-mvp-data'
 const sessionKey = 'waggulous-session-user'
+const siteThemes: {
+  id: ThemeId
+  name: string
+  description: string
+  variables: Record<string, string>
+}[] = [
+  {
+    id: 'waggulous',
+    name: 'Waggulous',
+    description: 'Warm cream, fresh green, and soft coral.',
+    variables: {
+      '--paper': '#fffdf8',
+      '--soft': '#f6efe4',
+      '--sage': '#dfeee2',
+      '--mint': '#c8ead7',
+      '--coral': '#f2bd83',
+      '--coral-hover': '#f4a870',
+      '--forest': '#2f6b50',
+      '--ink': '#1f2520',
+      '--muted': '#66716b',
+      '--line': '#e4d8c9',
+      '--hero-deep': '#0f231c',
+      '--hero-accent': '#16120c',
+      '--focus-ring': 'rgba(64, 121, 96, 0.25)',
+    },
+  },
+  {
+    id: 'burnt-orange',
+    name: 'Burnt orange',
+    description: 'Terracotta warmth with olive balance.',
+    variables: {
+      '--paper': '#fffaf4',
+      '--soft': '#f7e7d7',
+      '--sage': '#ead6bc',
+      '--mint': '#e8b875',
+      '--coral': '#c9652c',
+      '--coral-hover': '#ad4f1d',
+      '--forest': '#57633a',
+      '--ink': '#2b211b',
+      '--muted': '#735f50',
+      '--line': '#e4c8ad',
+      '--hero-deep': '#3a2415',
+      '--hero-accent': '#6e2d18',
+      '--focus-ring': 'rgba(201, 101, 44, 0.28)',
+    },
+  },
+  {
+    id: 'willow-green',
+    name: 'Willow green',
+    description: 'Leafy greens with a clean natural feel.',
+    variables: {
+      '--paper': '#fbfff9',
+      '--soft': '#e9f4e4',
+      '--sage': '#d3e7c9',
+      '--mint': '#b4dcaa',
+      '--coral': '#d9b66d',
+      '--coral-hover': '#c89c48',
+      '--forest': '#38633b',
+      '--ink': '#172416',
+      '--muted': '#5e6f5c',
+      '--line': '#cfdfc6',
+      '--hero-deep': '#132813',
+      '--hero-accent': '#425425',
+      '--focus-ring': 'rgba(56, 99, 59, 0.26)',
+    },
+  },
+  {
+    id: 'aqua-blue',
+    name: 'Aqua blue',
+    description: 'Fresh aqua with crisp coastal contrast.',
+    variables: {
+      '--paper': '#f8feff',
+      '--soft': '#e2f5f7',
+      '--sage': '#cae8ee',
+      '--mint': '#a8dde5',
+      '--coral': '#f0b36f',
+      '--coral-hover': '#df9650',
+      '--forest': '#1f6b74',
+      '--ink': '#14262a',
+      '--muted': '#557177',
+      '--line': '#c6e1e5',
+      '--hero-deep': '#123540',
+      '--hero-accent': '#1e6770',
+      '--focus-ring': 'rgba(31, 107, 116, 0.25)',
+    },
+  },
+  {
+    id: 'sunset',
+    name: 'Sunset',
+    description: 'Coral, plum, and golden evening tones.',
+    variables: {
+      '--paper': '#fff9f5',
+      '--soft': '#f8e3dc',
+      '--sage': '#ead7e0',
+      '--mint': '#efc0a4',
+      '--coral': '#e97855',
+      '--coral-hover': '#cf5f44',
+      '--forest': '#8b4562',
+      '--ink': '#2d1d24',
+      '--muted': '#725b63',
+      '--line': '#ebc8bd',
+      '--hero-deep': '#321727',
+      '--hero-accent': '#884d25',
+      '--focus-ring': 'rgba(233, 120, 85, 0.27)',
+    },
+  },
+  {
+    id: 'sunrise',
+    name: 'Sunrise',
+    description: 'Bright peach, honey, and clear morning green.',
+    variables: {
+      '--paper': '#fffdf2',
+      '--soft': '#fbefd0',
+      '--sage': '#e4edd2',
+      '--mint': '#f5d48a',
+      '--coral': '#f5a24b',
+      '--coral-hover': '#df842e',
+      '--forest': '#56734a',
+      '--ink': '#282417',
+      '--muted': '#726a50',
+      '--line': '#ead9a9',
+      '--hero-deep': '#31401f',
+      '--hero-accent': '#815216',
+      '--focus-ring': 'rgba(245, 162, 75, 0.28)',
+    },
+  },
+  {
+    id: 'rose',
+    name: 'Rose',
+    description: 'Soft rose with berry and warm neutral notes.',
+    variables: {
+      '--paper': '#fffafb',
+      '--soft': '#f7e5ea',
+      '--sage': '#eadde6',
+      '--mint': '#efc4d2',
+      '--coral': '#d96883',
+      '--coral-hover': '#bf506d',
+      '--forest': '#8a3f5b',
+      '--ink': '#2a1c22',
+      '--muted': '#715c64',
+      '--line': '#e8cbd4',
+      '--hero-deep': '#351a27',
+      '--hero-accent': '#7d334f',
+      '--focus-ring': 'rgba(217, 104, 131, 0.26)',
+    },
+  },
+]
 const dayOptions = [
   ['0', 'Sun'],
   ['1', 'Mon'],
@@ -183,6 +340,7 @@ const dayOptions = [
 ] as const
 
 const seedData: AppData = {
+  themeId: 'waggulous',
   users: [
     {
       id: 'u-owner',
@@ -390,12 +548,25 @@ function loadData(): AppData {
     const parsed = JSON.parse(saved) as AppData
     return {
       ...parsed,
+      themeId: isThemeId(parsed.themeId) ? parsed.themeId : seedData.themeId,
       serviceSlots: parsed.serviceSlots ?? seedData.serviceSlots,
       recurringBookings: parsed.recurringBookings ?? [],
     }
   } catch {
     return seedData
   }
+}
+
+function isThemeId(value: unknown): value is ThemeId {
+  return siteThemes.some((theme) => theme.id === value)
+}
+
+function getTheme(themeId: ThemeId) {
+  return (
+    siteThemes.find((theme) => theme.id === themeId) ??
+    siteThemes.find((theme) => theme.id === seedData.themeId) ??
+    siteThemes[0]
+  )
 }
 
 function makeId(prefix: string) {
@@ -683,6 +854,13 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const currentUser = data.users.find((user) => user.id === currentUserId)
+
+  useEffect(() => {
+    const theme = getTheme(data.themeId)
+    Object.entries(theme.variables).forEach(([property, value]) => {
+      document.documentElement.style.setProperty(property, value)
+    })
+  }, [data.themeId])
 
   useEffect(() => {
     localStorage.setItem(storageKey, JSON.stringify(data))
@@ -1221,7 +1399,7 @@ function OwnerDashboard({
   user: User
 }) {
   const [tab, setTab] = useState<
-    'queue' | 'clients' | 'staff' | 'services' | 'chat'
+    'queue' | 'clients' | 'staff' | 'services' | 'theme' | 'chat'
   >('queue')
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
 
@@ -1275,6 +1453,7 @@ function OwnerDashboard({
           ['clients', 'Clients'],
           ['staff', 'Staff'],
           ['services', 'Services'],
+          ['theme', 'Theme'],
           ['chat', 'Messages'],
         ]}
         onChange={(value) => setTab(value as typeof tab)}
@@ -1416,6 +1595,8 @@ function OwnerDashboard({
       )}
 
       {tab === 'services' && <ServicesPanel data={data} setData={setData} />}
+
+      {tab === 'theme' && <ThemePanel data={data} setData={setData} />}
 
       {tab === 'staff' && <StaffAdminPanel data={data} setData={setData} />}
 
@@ -4057,6 +4238,87 @@ function MoneyPanel({
         </table>
       </div>
       <BookingList bookings={bookings} data={data} />
+    </section>
+  )
+}
+
+function ThemePanel({
+  data,
+  setData,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+}) {
+  const selectedTheme = getTheme(data.themeId)
+
+  return (
+    <section className="workspace">
+      <WorkspaceTitle
+        eyebrow="Site theme"
+        title="Choose the colour scheme customers and staff see."
+      />
+      <div className="theme-summary">
+        <span className="icon-chip">
+          <Palette size={20} />
+        </span>
+        <div>
+          <h3>{selectedTheme.name}</h3>
+          <p>{selectedTheme.description}</p>
+        </div>
+      </div>
+      <div className="theme-grid">
+        {siteThemes.map((theme) => {
+          const isSelected = theme.id === data.themeId
+
+          return (
+            <article
+              className={
+                isSelected ? 'theme-card is-selected' : 'theme-card'
+              }
+              key={theme.id}
+            >
+              <div className="theme-card-header">
+                <div>
+                  <h3>{theme.name}</h3>
+                  <p>{theme.description}</p>
+                </div>
+                <span className="theme-selected-pill">
+                  {isSelected ? 'Selected' : 'Available'}
+                </span>
+              </div>
+              <div className="theme-swatches" aria-hidden="true">
+                {[
+                  '--paper',
+                  '--soft',
+                  '--sage',
+                  '--mint',
+                  '--coral',
+                  '--forest',
+                  '--ink',
+                ].map((property) => (
+                  <span
+                    key={property}
+                    style={{ background: theme.variables[property] }}
+                  />
+                ))}
+              </div>
+              <button
+                className={isSelected ? 'button primary' : 'button ghost'}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() =>
+                  setData((current) => ({
+                    ...current,
+                    themeId: theme.id,
+                  }))
+                }
+              >
+                {isSelected ? 'Current theme' : `Use ${theme.name}`}
+              </button>
+            </article>
+          )
+        })}
+      </div>
     </section>
   )
 }
