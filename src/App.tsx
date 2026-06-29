@@ -601,7 +601,7 @@ function calculateServicePrice(service: Service, petCount: number) {
   return Math.max(0, standardTotal * (1 - rule.amount / 100))
 }
 
-function calculateOutstanding(transactions: Transaction[]) {
+function calculateTransactionOutstanding(transactions: Transaction[]) {
   return transactions.reduce((total, transaction) => {
     if (transaction.status === 'owed') return total + transaction.amount
     if (transaction.status === 'paid' && transaction.type === 'payment') {
@@ -611,15 +611,75 @@ function calculateOutstanding(transactions: Transaction[]) {
   }, 0)
 }
 
-function calculateBookingOutstanding(data: AppData, booking: Booking) {
+function bookingIsReadyForBilling(booking: Booking) {
+  return Boolean(booking.pickedUpAt && booking.returnedAt)
+}
+
+function transactionCountsTowardOutstanding(
+  data: AppData,
+  transaction: Transaction,
+) {
+  if (!transaction.bookingId) return true
+
+  const booking = data.bookings.find(
+    (candidate) => candidate.id === transaction.bookingId,
+  )
+
+  return Boolean(booking && bookingIsReadyForBilling(booking))
+}
+
+function calculateCustomerOutstanding(data: AppData, customerId: string) {
   return Math.max(
     0,
-    calculateOutstanding(
+    calculateTransactionOutstanding(
+      data.transactions.filter(
+        (transaction) =>
+          transaction.customerId === customerId &&
+          transactionCountsTowardOutstanding(data, transaction),
+      ),
+    ),
+  )
+}
+
+function calculateBookingOutstanding(data: AppData, booking: Booking) {
+  if (!bookingIsReadyForBilling(booking)) return 0
+
+  return Math.max(
+    0,
+    calculateTransactionOutstanding(
       data.transactions.filter(
         (transaction) => transaction.bookingId === booking.id,
       ),
     ),
   )
+}
+
+function calculateBookingPaid(data: AppData, booking: Booking) {
+  if (!bookingIsReadyForBilling(booking)) return 0
+
+  return data.transactions
+    .filter(
+      (transaction) =>
+        transaction.bookingId === booking.id &&
+        transaction.status === 'paid' &&
+        transaction.type === 'payment',
+    )
+    .reduce((total, transaction) => total + transaction.amount, 0)
+}
+
+function bookingPaymentLabel(data: AppData, booking: Booking) {
+  if (!bookingIsReadyForBilling(booking)) return ''
+
+  const outstanding = calculateBookingOutstanding(data, booking)
+  const paid = calculateBookingPaid(data, booking)
+
+  if (outstanding <= 0) return `Paid ${formatMoney(booking.price)}`
+  if (paid > 0) {
+    return `Part paid ${formatMoney(paid)} · ${formatMoney(
+      outstanding,
+    )} outstanding`
+  }
+  return `${formatMoney(outstanding)} outstanding`
 }
 
 function multiPetPricingLabel(service: Service) {
@@ -1339,7 +1399,7 @@ function CustomerDashboard({
   const transactions = data.transactions.filter(
     (transaction) => transaction.customerId === user.id,
   )
-  const owed = calculateOutstanding(transactions)
+  const owed = calculateCustomerOutstanding(data, user.id)
 
   return (
     <div className="dashboard-grid">
@@ -1982,7 +2042,9 @@ function ClientBookingPanel({
     .sort((a, b) => a.name.localeCompare(b.name))
   const activeServices = data.services.filter((service) => service.active)
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
-  const [panelTab, setPanelTab] = useState<'client' | 'appointment'>('client')
+  const [panelTab, setPanelTab] = useState<
+    'client' | 'appointment' | 'payment'
+  >('client')
   const [selectedClientId, setSelectedClientId] = useState(
     customers[0]?.id ?? '',
   )
@@ -2029,6 +2091,10 @@ function ClientBookingPanel({
     notes: '',
     walkerId: user.role === 'walker' ? user.id : '',
   })
+  const [bulkPaymentDraft, setBulkPaymentDraft] = useState({
+    amount: '',
+    method: 'cash' as Transaction['method'],
+  })
   const [error, setError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const selectedCustomer = customers.find(
@@ -2051,6 +2117,18 @@ function ClientBookingPanel({
   const selectedAppointmentSlot = data.serviceSlots.find(
     (slot) => slot.id === bookingDraft.slotId,
   )
+  const selectedClientOutstanding = selectedCustomer
+    ? calculateCustomerOutstanding(data, selectedCustomer.id)
+    : 0
+  const selectedClientCompletedBookings = selectedCustomer
+    ? data.bookings
+        .filter(
+          (booking) =>
+            booking.customerId === selectedCustomer.id &&
+            bookingIsReadyForBilling(booking),
+        )
+        .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
+    : []
 
   function resetClientPetDraft() {
     setClientPetDraft({
@@ -2352,6 +2430,93 @@ function ClientBookingPanel({
     })
   }
 
+  function recordBulkPayment(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    setSuccessMessage('')
+
+    if (!selectedCustomer) {
+      setError('Choose a client before recording a payment.')
+      return
+    }
+
+    const paymentAmount = Number(bulkPaymentDraft.amount)
+
+    if (Number.isNaN(paymentAmount) || paymentAmount <= 0) {
+      setError('Enter a valid payment amount.')
+      return
+    }
+
+    if (selectedClientOutstanding <= 0) {
+      setError('This client has no completed-service balance to pay.')
+      return
+    }
+
+    if (paymentAmount > selectedClientOutstanding) {
+      setError(
+        `Amount cannot exceed outstanding ${formatMoney(
+          selectedClientOutstanding,
+        )}.`,
+      )
+      return
+    }
+
+    setData((current) => {
+      const customer = current.users.find(
+        (candidate) => candidate.id === selectedCustomer.id,
+      )
+      if (!customer) return current
+
+      let remaining = paymentAmount
+      const payments: Transaction[] = []
+      const completedBookings = current.bookings
+        .filter(
+          (booking) =>
+            booking.customerId === customer.id && bookingIsReadyForBilling(booking),
+        )
+        .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
+
+      for (const booking of completedBookings) {
+        if (remaining <= 0) break
+
+        const outstanding = calculateBookingOutstanding(
+          { ...current, transactions: [...payments, ...current.transactions] },
+          booking,
+        )
+        if (outstanding <= 0) continue
+
+        const allocated = Math.min(outstanding, remaining)
+        payments.push({
+          id: makeId('t'),
+          bookingId: booking.id,
+          customerId: customer.id,
+          date: formatDateInputValue(),
+          description: `Bulk ${bulkPaymentDraft.method ?? 'other'} payment`,
+          amount: allocated,
+          status: 'paid',
+          type: 'payment',
+          method: bulkPaymentDraft.method,
+          recordedById: user.id,
+          confirmedById: user.id,
+          createdAt: new Date().toISOString(),
+        })
+        remaining -= allocated
+      }
+
+      return {
+        ...current,
+        transactions: [...payments, ...current.transactions],
+      }
+    })
+
+    setSuccessMessage(
+      `${formatMoney(paymentAmount)} payment recorded for ${
+        selectedCustomer.name
+      }.`,
+    )
+    setBulkPaymentDraft({ amount: '', method: 'cash' })
+  }
+
   return (
     <section className="workspace">
       <WorkspaceTitle
@@ -2381,6 +2546,19 @@ function ClientBookingPanel({
         >
           Appointment
         </button>
+        {user.role === 'owner' && (
+          <button
+            className={panelTab === 'payment' ? 'is-active' : ''}
+            type="button"
+            onClick={() => {
+              setPanelTab('payment')
+              setError('')
+              setSuccessMessage('')
+            }}
+          >
+            Payments
+          </button>
+        )}
       </div>
 
       {panelTab === 'client' && (
@@ -2826,6 +3004,101 @@ function ClientBookingPanel({
             Add approved booking
           </button>
         </form>
+      )}
+
+      {panelTab === 'payment' && user.role === 'owner' && (
+        <section className="workspace nested-workspace">
+          <WorkspaceTitle
+            eyebrow="Client payments"
+            title="Record one payment across completed services."
+          />
+          <form className="form-grid" onSubmit={recordBulkPayment}>
+            <label className="wide">
+              Client
+              <select
+                value={selectedClientId}
+                onChange={(event) => {
+                  setSelectedClientId(event.target.value)
+                  setError('')
+                  setSuccessMessage('')
+                }}
+              >
+                <option value="">Choose client</option>
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.name} · {customer.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="price-preview wide">
+              <WalletCards size={18} />
+              <span>
+                Completed-service balance:{' '}
+                <strong>{formatMoney(selectedClientOutstanding)}</strong>
+              </span>
+            </div>
+            <label>
+              Payment received
+              <input
+                type="number"
+                min="0"
+                max={selectedClientOutstanding}
+                step="0.5"
+                value={bulkPaymentDraft.amount}
+                onChange={(event) =>
+                  setBulkPaymentDraft({
+                    ...bulkPaymentDraft,
+                    amount: event.target.value,
+                  })
+                }
+                placeholder={formatMoney(selectedClientOutstanding)}
+              />
+            </label>
+            <label>
+              Method
+              <select
+                value={bulkPaymentDraft.method}
+                onChange={(event) =>
+                  setBulkPaymentDraft({
+                    ...bulkPaymentDraft,
+                    method: event.target.value as Transaction['method'],
+                  })
+                }
+              >
+                <option value="cash">Cash</option>
+                <option value="bank">Bank transfer</option>
+                <option value="card">Card</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            {error && <p className="form-error wide">{error}</p>}
+            {successMessage && (
+              <p className="form-success wide" role="status">
+                {successMessage}
+              </p>
+            )}
+            <button className="button primary" type="submit">
+              <CreditCard size={16} />
+              Record client payment
+            </button>
+          </form>
+
+          {selectedClientCompletedBookings.length === 0 ? (
+            <div className="empty-state">
+              <h3>No completed services.</h3>
+              <p>
+                Services appear here after pickup and return have both been
+                marked.
+              </p>
+            </div>
+          ) : (
+            <BookingList
+              bookings={selectedClientCompletedBookings}
+              data={data}
+            />
+          )}
+        </section>
       )}
     </section>
   )
@@ -4292,6 +4565,10 @@ function MoneyPanel({
   bookings: Booking[]
   data: AppData
 }) {
+  const visibleTransactions = transactions.filter((transaction) =>
+    transactionCountsTowardOutstanding(data, transaction),
+  )
+
   return (
     <section className="workspace">
       <WorkspaceTitle
@@ -4314,7 +4591,7 @@ function MoneyPanel({
         <Metric
           icon={<CalendarDays />}
           label="Historical records"
-          value={transactions.length}
+          value={visibleTransactions.length}
         />
       </div>
       <div className="table-wrap">
@@ -4328,7 +4605,7 @@ function MoneyPanel({
             </tr>
           </thead>
           <tbody>
-            {transactions.map((transaction) => (
+            {visibleTransactions.map((transaction) => (
               <tr key={transaction.id}>
                 <td>{formatDate(transaction.date)}</td>
                 <td>{transaction.description}</td>
@@ -5010,6 +5287,7 @@ function BookingList({
         const walker = data.users.find(
           (candidate) => candidate.id === booking.walkerId,
         )
+        const paymentLabel = bookingPaymentLabel(data, booking)
 
         return (
           <article className="booking-row" key={booking.id}>
@@ -5032,6 +5310,7 @@ function BookingList({
                   {formatDateTime(booking.returnedAt)}
                 </p>
               )}
+              {paymentLabel && <p className="muted">{paymentLabel}</p>}
             </div>
           </article>
         )
@@ -5062,9 +5341,7 @@ function PaymentControls({
       transaction.bookingId === booking.id &&
       transaction.status === 'payment-pending',
   )
-  const canRecord = ['approved', 'in-progress', 'completed'].includes(
-    booking.status,
-  )
+  const canRecord = bookingIsReadyForBilling(booking)
 
   function submit(event: FormEvent) {
     event.preventDefault()

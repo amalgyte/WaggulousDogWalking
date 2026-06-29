@@ -201,19 +201,9 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
   ).toContainText('approved')
-  await page
-    .locator('article')
-    .filter({ hasText: 'Bertie' })
-    .getByLabel('Payment received')
-    .fill('5')
-  await page
-    .locator('article')
-    .filter({ hasText: 'Bertie' })
-    .getByRole('button', { name: /mark received/i })
-    .click()
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
-  ).toContainText('Pending cash payment')
+  ).toHaveCount(1)
 
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByLabel('Client name').fill('Casey Phone')
@@ -240,15 +230,10 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
 
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'owner@waggulous.local')
-  await page
-    .locator('article')
-    .filter({ hasText: 'Bertie' })
-    .getByRole('button', { name: /confirm payment/i })
-    .click()
   await page.getByRole('button', { name: /sign out/i }).click()
   await page.getByRole('button', { name: /sam@example.com/i }).click()
   await page.getByRole('button', { name: 'Money' }).click()
-  await expect(page.getByText('£21.00')).toBeVisible()
+  await expect(page.getByText('£0.00')).toBeVisible()
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'owner@waggulous.local')
   await page.getByRole('button', { name: 'Staff' }).click()
@@ -391,6 +376,113 @@ test('recurring slot bookings can be halted and individual slots cancelled', asy
     )
   })
   expect(chargeDecision).toBe(true)
+})
+
+test('money only matures completed services and bulk payments allocate oldest first', async ({
+  page,
+}) => {
+  const walkDates = [
+    dateInputFromToday(-5),
+    dateInputFromToday(-4),
+    dateInputFromToday(-3),
+  ]
+
+  await page.evaluate((dates) => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    const bookings = dates.map((date, index) => ({
+      id: `b-completed-${index + 1}`,
+      customerId: 'u-customer',
+      petIds: ['p-mabel'],
+      serviceId: 's-walk-30',
+      date,
+      time: '09:00',
+      notes: '',
+      status: 'completed',
+      price: 14,
+      walkerId: 'u-walker',
+      pickedUpAt: `${date}T09:00:00.000Z`,
+      returnedAt: `${date}T09:35:00.000Z`,
+    }))
+    const transactions = bookings.map(
+      (booking: { id: string; customerId: string; date: string }, index) => ({
+        id: `t-completed-${index + 1}`,
+        customerId: booking.customerId,
+        bookingId: booking.id,
+        date: booking.date,
+        description: `Approved 30 minute walk for Mabel ${index + 1}`,
+        amount: 14,
+        status: 'owed',
+        type: 'charge',
+      }),
+    )
+
+    localStorage.setItem(
+      'waggulous-mvp-data',
+      JSON.stringify({
+        ...data,
+        bookings: [...bookings, ...data.bookings],
+        transactions: [...transactions, ...data.transactions],
+      }),
+    )
+  }, walkDates)
+  await page.reload()
+
+  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await page.getByRole('button', { name: 'Money' }).click()
+  await expect(
+    page.getByRole('heading', { name: /owed monies/i }),
+  ).toBeVisible()
+  await expect(page.getByText('£42.00')).toBeVisible()
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'owner@waggulous.local')
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByRole('button', { name: 'Payments' }).click()
+  await expect(page.getByText(/Completed-service balance:/)).toContainText(
+    '£42.00',
+  )
+  await page.getByLabel('Payment received', { exact: true }).fill('30')
+  await page.getByRole('button', { name: /record client payment/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    '£30.00 payment recorded',
+  )
+  await expect(page.getByText(/Completed-service balance:/)).toContainText(
+    '£12.00',
+  )
+  await expect(page.getByText('Paid £14.00')).toHaveCount(2)
+  await expect(
+    page.getByText('Part paid £2.00 · £12.00 outstanding'),
+  ).toBeVisible()
+
+  const allocations = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.bookings
+      .filter((booking: { id: string }) => booking.id.startsWith('b-completed-'))
+      .sort((a: { date: string }, b: { date: string }) =>
+        a.date.localeCompare(b.date),
+      )
+      .map((booking: { id: string }) => ({
+        id: booking.id,
+        paid: data.transactions
+          .filter(
+            (transaction: { bookingId?: string; status: string; type?: string }) =>
+              transaction.bookingId === booking.id &&
+              transaction.status === 'paid' &&
+              transaction.type === 'payment',
+          )
+          .reduce(
+            (total: number, transaction: { amount: number }) =>
+              total + transaction.amount,
+            0,
+          ),
+      }))
+  })
+
+  expect(allocations).toEqual([
+    { id: 'b-completed-1', paid: 14 },
+    { id: 'b-completed-2', paid: 14 },
+    { id: 'b-completed-3', paid: 2 },
+  ])
 })
 
 test('recurring requests support custom lengths and one-click approval', async ({
