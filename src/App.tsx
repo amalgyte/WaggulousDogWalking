@@ -138,6 +138,8 @@ type RecurringBooking = {
   slotId: string
   startDate: string
   days: number[]
+  durationWeeks?: number
+  continuesUntilCancelled?: boolean
   status: 'active' | 'halted'
   createdById: string
   createdAt: string
@@ -680,6 +682,28 @@ function getRecurringDates(startDate: string, days: number[], weekCount = 8) {
   }
 
   return dates
+}
+
+function getRecurringRequestWeekCount(duration: string) {
+  if (duration === 'until-cancelled') return 8
+  const weeks = Number(duration)
+  if (!Number.isFinite(weeks)) return 8
+  return Math.min(8, Math.max(2, weeks))
+}
+
+function formatRecurringRequestLength(duration: string, bookingCount: number) {
+  return duration === 'until-cancelled'
+    ? `until cancelled, with ${bookingCount} upcoming appointment${
+        bookingCount === 1 ? '' : 's'
+      }`
+    : `for ${duration} weeks (${bookingCount} appointment${
+        bookingCount === 1 ? '' : 's'
+      })`
+}
+
+function formatRecurringSeriesLength(series: RecurringBooking) {
+  if (series.continuesUntilCancelled) return 'Until cancelled'
+  return `${series.durationWeeks ?? 8} weeks`
 }
 
 function formatTimeInputValue(date = new Date()) {
@@ -1402,6 +1426,19 @@ function OwnerDashboard({
     'queue' | 'clients' | 'staff' | 'services' | 'theme' | 'chat'
   >('queue')
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
+  const ownerQueueBookings = data.bookings.filter((booking, index, bookings) => {
+    if (!booking.recurringBookingId || booking.status !== 'requested') {
+      return true
+    }
+
+    return (
+      bookings.findIndex(
+        (candidate) =>
+          candidate.recurringBookingId === booking.recurringBookingId &&
+          candidate.status === 'requested',
+      ) === index
+    )
+  })
 
   function resolveCancellationCharge(booking: Booking, chargeable: boolean) {
     setData((current) => {
@@ -1466,7 +1503,7 @@ function OwnerDashboard({
             title="Approve bookings and assign walkers."
           />
           <div className="booking-stack">
-            {data.bookings.map((booking) => {
+            {ownerQueueBookings.map((booking) => {
               const service = data.services.find(
                 (candidate) => candidate.id === booking.serviceId,
               )
@@ -1476,6 +1513,17 @@ function OwnerDashboard({
               const selectedPets = data.pets.filter((pet) =>
                 booking.petIds.includes(pet.id),
               )
+              const approvalTargets = getApprovalTargetBookings(data, booking)
+              const approvalTargetIds = approvalTargets.map(
+                (candidate) => candidate.id,
+              )
+              const recurringSeries = booking.recurringBookingId
+                ? data.recurringBookings.find(
+                    (series) => series.id === booking.recurringBookingId,
+                  )
+                : undefined
+              const isRecurringApproval =
+                approvalTargets.length > 1 && booking.status === 'requested'
 
               return (
                 <article className="booking-row" key={booking.id}>
@@ -1492,6 +1540,15 @@ function OwnerDashboard({
                       {customer?.name} ·{' '}
                       {selectedPets.map((pet) => pet.name).join(', ')}
                     </p>
+                    {isRecurringApproval && (
+                      <p className="muted">
+                        Recurring request · {approvalTargets.length}{' '}
+                        appointments ·{' '}
+                        {recurringSeries
+                          ? formatRecurringSeriesLength(recurringSeries)
+                          : 'Recurring series'}
+                      </p>
+                    )}
                     {booking.notes && <p>{booking.notes}</p>}
                   </div>
                   <div className="row-actions">
@@ -1501,7 +1558,7 @@ function OwnerDashboard({
                         setData((current) => ({
                           ...current,
                           bookings: current.bookings.map((candidate) =>
-                            candidate.id === booking.id
+                            approvalTargetIds.includes(candidate.id)
                               ? {
                                   ...candidate,
                                   walkerId: event.target.value || undefined,
@@ -1527,7 +1584,7 @@ function OwnerDashboard({
                       }
                     >
                       <Check size={16} />
-                      Approve
+                      {isRecurringApproval ? 'Approve series' : 'Approve'}
                     </button>
                     <button
                       className="button danger"
@@ -1537,7 +1594,7 @@ function OwnerDashboard({
                         setData((current) => ({
                           ...current,
                           bookings: current.bookings.map((candidate) =>
-                            candidate.id === booking.id
+                            approvalTargetIds.includes(candidate.id)
                               ? { ...candidate, status: 'declined' }
                               : candidate,
                           ),
@@ -1545,7 +1602,7 @@ function OwnerDashboard({
                       }
                     >
                       <X size={16} />
-                      Decline
+                      {isRecurringApproval ? 'Decline series' : 'Decline'}
                     </button>
                   </div>
                   <PaymentControls
@@ -1670,11 +1727,18 @@ function WalkerDashboard({
     const bookingToClaim = data.bookings.find(
       (booking) => booking.id === bookingId,
     )
+    const bookingsToClaim = bookingToClaim
+      ? getApprovalTargetBookings(data, bookingToClaim).filter(
+          (booking) => !booking.walkerId,
+        )
+      : []
 
     if (
       bookingToClaim?.status === 'requested' &&
       !window.confirm(
-        'This appointment is awaiting approval. Clicking OK will claim and approve it.',
+        bookingToClaim.recurringBookingId && bookingsToClaim.length > 1
+          ? `This recurring request is awaiting approval. Clicking OK will claim and approve all ${bookingsToClaim.length} requested appointments in the series.`
+          : 'This appointment is awaiting approval. Clicking OK will claim and approve it.',
       )
     ) {
       return
@@ -1687,15 +1751,18 @@ function WalkerDashboard({
 
       if (!currentBooking || currentBooking.walkerId) return current
 
+      const claimTargets = getApprovalTargetBookings(current, currentBooking)
+        .filter((booking) => !booking.walkerId)
+      const claimTargetIds = claimTargets.map((booking) => booking.id)
       const shouldApprove = currentBooking.status === 'requested'
       const approvalRecords = shouldApprove
-        ? buildApprovalRecords(currentBooking, current, user.id)
-        : null
+        ? claimTargets.map((booking) => buildApprovalRecords(booking, current, user.id))
+        : []
 
       return {
         ...current,
         bookings: current.bookings.map((booking) =>
-          booking.id === bookingId
+          claimTargetIds.includes(booking.id)
             ? {
                 ...booking,
                 walkerId: user.id,
@@ -1703,12 +1770,14 @@ function WalkerDashboard({
               }
             : booking,
         ),
-        transactions: approvalRecords
-          ? [approvalRecords.transaction, ...current.transactions]
-          : current.transactions,
-        messages: approvalRecords
-          ? [approvalRecords.message, ...current.messages]
-          : current.messages,
+        transactions: [
+          ...approvalRecords.map((records) => records.transaction),
+          ...current.transactions,
+        ],
+        messages: [
+          ...approvalRecords.map((records) => records.message),
+          ...current.messages,
+        ],
       }
     })
   }
@@ -3726,6 +3795,7 @@ function BookingRequestPanel({
     slotId: '',
     recurring: false,
     recurringDays: [] as number[],
+    recurringDuration: '8',
     notes: '',
   })
   const [error, setError] = useState('')
@@ -3768,7 +3838,11 @@ function BookingRequestPanel({
 
     const recurringDates =
       draft.recurring && selectedSlot
-        ? getRecurringDates(draft.date, draft.recurringDays)
+        ? getRecurringDates(
+            draft.date,
+            draft.recurringDays,
+            getRecurringRequestWeekCount(draft.recurringDuration),
+          )
         : []
     const slotError = draft.recurring
       ? ''
@@ -3822,6 +3896,12 @@ function BookingRequestPanel({
             slotId: selectedSlot.id,
             startDate: draft.date,
             days: draft.recurringDays,
+            durationWeeks:
+              draft.recurringDuration === 'until-cancelled'
+                ? undefined
+                : getRecurringRequestWeekCount(draft.recurringDuration),
+            continuesUntilCancelled:
+              draft.recurringDuration === 'until-cancelled',
             status: 'active',
             createdById: customer.id,
             createdAt: new Date().toISOString(),
@@ -3843,7 +3923,10 @@ function BookingRequestPanel({
           body: draft.recurring
             ? `New recurring ${selectedService.name} request from ${formatDate(
                 firstBooking.date,
-              )} for ${bookings.length} occurrences.`
+              )} ${formatRecurringRequestLength(
+                draft.recurringDuration,
+                bookings.length,
+              )}.`
             : `New ${selectedService.name} request for ${formatDate(
                 firstBooking.date,
               )} at ${formatBookingTime(firstBooking)}.`,
@@ -3854,7 +3937,10 @@ function BookingRequestPanel({
     })
     setSuccessMessage(
       draft.recurring
-        ? `${selectedService.name} recurring request sent for ${bookings.length} appointments.`
+        ? `${selectedService.name} recurring request sent ${formatRecurringRequestLength(
+            draft.recurringDuration,
+            bookings.length,
+          )}.`
         : `${selectedService.name} request sent for ${formatDate(
             firstBooking.date,
           )} at ${formatBookingTime(firstBooking)}.`,
@@ -3866,6 +3952,7 @@ function BookingRequestPanel({
       slotId: '',
       recurring: false,
       recurringDays: [],
+      recurringDuration: '8',
       notes: '',
     })
   }
@@ -3997,31 +4084,49 @@ function BookingRequestPanel({
                 setDraft({ ...draft, recurring: event.target.checked })
               }
             />
-            Repeat weekly for the next 8 weeks
+            Repeat weekly
           </label>
         )}
         {selectedSlot && draft.recurring && (
-          <fieldset className="wide checkbox-set">
-            <legend>Repeat on</legend>
-            {dayOptions
-              .filter(([id]) => selectedSlot.days.includes(Number(id)))
-              .map(([id, label]) => (
-                <label key={id}>
-                  <input
-                    type="checkbox"
-                    checked={draft.recurringDays.includes(Number(id))}
-                    onChange={(event) => {
-                      const day = Number(id)
-                      const recurringDays = event.target.checked
-                        ? [...draft.recurringDays, day].sort()
-                        : draft.recurringDays.filter((value) => value !== day)
-                      setDraft({ ...draft, recurringDays })
-                    }}
-                  />
-                  {label}
-                </label>
-              ))}
-          </fieldset>
+          <>
+            <label>
+              Repeat length
+              <select
+                value={draft.recurringDuration}
+                onChange={(event) =>
+                  setDraft({ ...draft, recurringDuration: event.target.value })
+                }
+              >
+                {[2, 3, 4, 5, 6, 7, 8].map((weeks) => (
+                  <option key={weeks} value={weeks}>
+                    {weeks} weeks
+                  </option>
+                ))}
+                <option value="until-cancelled">Until I cancel</option>
+              </select>
+            </label>
+            <fieldset className="wide checkbox-set">
+              <legend>Repeat on</legend>
+              {dayOptions
+                .filter(([id]) => selectedSlot.days.includes(Number(id)))
+                .map(([id, label]) => (
+                  <label key={id}>
+                    <input
+                      type="checkbox"
+                      checked={draft.recurringDays.includes(Number(id))}
+                      onChange={(event) => {
+                        const day = Number(id)
+                        const recurringDays = event.target.checked
+                          ? [...draft.recurringDays, day].sort()
+                          : draft.recurringDays.filter((value) => value !== day)
+                        setDraft({ ...draft, recurringDays })
+                      }}
+                    />
+                    {label}
+                  </label>
+                ))}
+            </fieldset>
+          </>
         )}
         <label className="wide">
           Notes
@@ -4098,6 +4203,7 @@ function BookingRequestPanel({
                       {formatDate(series.startDate)}
                     </p>
                     <p className="muted">
+                      {formatRecurringSeriesLength(series)} ·{' '}
                       Repeats:{' '}
                       {series.days
                         .map((day) => dayOptions.find(([id]) => Number(id) === day)?.[1])
@@ -5087,12 +5193,16 @@ function approveBooking(
   setData: Dispatch<SetStateAction<AppData>>,
   ownerId: string,
 ) {
-  const approvalRecords = buildApprovalRecords(booking, data, ownerId)
+  const approvalTargets = getApprovalTargetBookings(data, booking)
+  const approvalTargetIds = approvalTargets.map((candidate) => candidate.id)
+  const approvalRecords = approvalTargets.map((target) =>
+    buildApprovalRecords(target, data, ownerId),
+  )
 
   setData({
     ...data,
     bookings: data.bookings.map((candidate) =>
-      candidate.id === booking.id
+      approvalTargetIds.includes(candidate.id)
         ? {
             ...candidate,
             status: 'approved',
@@ -5100,14 +5210,28 @@ function approveBooking(
         : candidate,
     ),
     transactions: [
-      approvalRecords.transaction,
+      ...approvalRecords.map((records) => records.transaction),
       ...data.transactions,
     ],
     messages: [
-      approvalRecords.message,
+      ...approvalRecords.map((records) => records.message),
       ...data.messages,
     ],
   })
+}
+
+function getApprovalTargetBookings(data: AppData, booking: Booking) {
+  if (!booking.recurringBookingId || booking.status !== 'requested') {
+    return [booking]
+  }
+
+  return data.bookings
+    .filter(
+      (candidate) =>
+        candidate.recurringBookingId === booking.recurringBookingId &&
+        candidate.status === 'requested',
+    )
+    .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
 }
 
 function buildApprovalRecords(

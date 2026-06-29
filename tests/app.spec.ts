@@ -392,3 +392,83 @@ test('recurring slot bookings can be halted and individual slots cancelled', asy
   })
   expect(chargeDecision).toBe(true)
 })
+
+test('recurring requests support custom lengths and one-click approval', async ({
+  page,
+}) => {
+  const nextMonday = dateInputForNextWeekday(1)
+
+  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await page.getByRole('button', { name: 'Request' }).click()
+  await page.getByLabel('Service').selectOption('s-walk-30')
+  await page.getByRole('checkbox', { name: 'Mabel' }).check()
+  await page.getByLabel('Date', { exact: true }).fill(nextMonday)
+  await page.getByLabel('Available slot').selectOption('slot-walk-early')
+  await page.getByLabel(/repeat weekly/i).check()
+  await expect(page.getByLabel('Repeat length')).toContainText('Until I cancel')
+  await page.getByLabel('Repeat length').selectOption('2')
+  await page.getByRole('button', { name: /request service/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'recurring request sent for 2 weeks',
+  )
+
+  const requestedSeries = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    const series = data.recurringBookings[0]
+    const bookings = data.bookings.filter(
+      (booking: { recurringBookingId?: string }) =>
+        booking.recurringBookingId === series.id,
+    )
+
+    return {
+      durationWeeks: series.durationWeeks,
+      continuesUntilCancelled: series.continuesUntilCancelled,
+      bookingCount: bookings.length,
+      requestedCount: bookings.filter(
+        (booking: { status: string }) => booking.status === 'requested',
+      ).length,
+    }
+  })
+
+  expect(requestedSeries).toEqual({
+    durationWeeks: 2,
+    continuesUntilCancelled: false,
+    bookingCount: 10,
+    requestedCount: 10,
+  })
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'owner@waggulous.local')
+  const recurringRequest = page.locator('article').filter({
+    hasText: 'Recurring request',
+  })
+  await expect(recurringRequest).toHaveCount(1)
+  await expect(recurringRequest).toContainText('10 appointments')
+  await recurringRequest.getByRole('button', { name: /approve series/i }).click()
+
+  const approvedSeries = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    const series = data.recurringBookings[0]
+    const bookings = data.bookings.filter(
+      (booking: { recurringBookingId?: string }) =>
+        booking.recurringBookingId === series.id,
+    )
+    const bookingIds = bookings.map((booking: { id: string }) => booking.id)
+
+    return {
+      approvedCount: bookings.filter(
+        (booking: { status: string }) => booking.status === 'approved',
+      ).length,
+      chargeCount: data.transactions.filter(
+        (transaction: { bookingId?: string; status: string }) =>
+          bookingIds.includes(transaction.bookingId ?? '') &&
+          transaction.status === 'owed',
+      ).length,
+    }
+  })
+
+  expect(approvedSeries).toEqual({
+    approvedCount: 10,
+    chargeCount: 10,
+  })
+})
