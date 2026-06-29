@@ -629,16 +629,27 @@ function transactionCountsTowardOutstanding(
 }
 
 function calculateCustomerOutstanding(data: AppData, customerId: string) {
-  return Math.max(
-    0,
-    calculateTransactionOutstanding(
-      data.transactions.filter(
-        (transaction) =>
-          transaction.customerId === customerId &&
-          transactionCountsTowardOutstanding(data, transaction),
-      ),
+  return calculateTransactionOutstanding(
+    data.transactions.filter(
+      (transaction) =>
+        transaction.customerId === customerId &&
+        transactionCountsTowardOutstanding(data, transaction),
     ),
   )
+}
+
+function balanceMetricLabel(balance: number, owedLabel: string) {
+  return balance < 0 ? 'In credit' : owedLabel
+}
+
+function formatBalanceAmount(balance: number) {
+  return formatMoney(Math.abs(balance))
+}
+
+function formatBalanceStatus(balance: number) {
+  return balance < 0
+    ? `${formatMoney(Math.abs(balance))} in credit`
+    : `${formatMoney(balance)} outstanding`
 }
 
 function calculateBookingOutstanding(data: AppData, booking: Booking) {
@@ -1425,8 +1436,8 @@ function CustomerDashboard({
             <Metric icon={<PawPrint />} label="Named pets" value={pets.length} />
             <Metric
               icon={<WalletCards />}
-              label="Currently owed"
-              value={formatMoney(owed)}
+              label={balanceMetricLabel(owed, 'Currently owed')}
+              value={formatBalanceAmount(owed)}
             />
             <Metric
               icon={<CalendarDays />}
@@ -2447,20 +2458,6 @@ function ClientBookingPanel({
       return
     }
 
-    if (selectedClientOutstanding <= 0) {
-      setError('This client has no completed-service balance to pay.')
-      return
-    }
-
-    if (paymentAmount > selectedClientOutstanding) {
-      setError(
-        `Amount cannot exceed outstanding ${formatMoney(
-          selectedClientOutstanding,
-        )}.`,
-      )
-      return
-    }
-
     setData((current) => {
       const customer = current.users.find(
         (candidate) => candidate.id === selectedCustomer.id,
@@ -2501,6 +2498,24 @@ function ClientBookingPanel({
           createdAt: new Date().toISOString(),
         })
         remaining -= allocated
+      }
+
+      if (remaining > 0) {
+        payments.push({
+          id: makeId('t'),
+          customerId: customer.id,
+          date: formatDateInputValue(),
+          description: `Client credit from ${
+            bulkPaymentDraft.method ?? 'other'
+          } payment`,
+          amount: remaining,
+          status: 'paid',
+          type: 'payment',
+          method: bulkPaymentDraft.method,
+          recordedById: user.id,
+          confirmedById: user.id,
+          createdAt: new Date().toISOString(),
+        })
       }
 
       return {
@@ -3034,8 +3049,8 @@ function ClientBookingPanel({
             <div className="price-preview wide">
               <WalletCards size={18} />
               <span>
-                Completed-service balance:{' '}
-                <strong>{formatMoney(selectedClientOutstanding)}</strong>
+                Client balance:{' '}
+                <strong>{formatBalanceStatus(selectedClientOutstanding)}</strong>
               </span>
             </div>
             <label>
@@ -3043,7 +3058,6 @@ function ClientBookingPanel({
               <input
                 type="number"
                 min="0"
-                max={selectedClientOutstanding}
                 step="0.5"
                 value={bulkPaymentDraft.amount}
                 onChange={(event) =>
@@ -3052,7 +3066,7 @@ function ClientBookingPanel({
                     amount: event.target.value,
                   })
                 }
-                placeholder={formatMoney(selectedClientOutstanding)}
+                placeholder={formatBalanceAmount(selectedClientOutstanding)}
               />
             </label>
             <label>
@@ -4585,8 +4599,8 @@ function MoneyPanel({
       <div className="metric-grid">
         <Metric
           icon={<WalletCards />}
-          label="Outstanding"
-          value={formatMoney(owed)}
+          label={balanceMetricLabel(owed, 'Outstanding')}
+          value={formatBalanceAmount(owed)}
         />
         <Metric
           icon={<CalendarDays />}
@@ -5354,30 +5368,55 @@ function PaymentControls({
       return
     }
 
-    if (paymentAmount > outstanding) {
+    const isOwner = user.role === 'owner'
+
+    if (!isOwner && paymentAmount > outstanding) {
       setError(`Amount cannot exceed outstanding ${formatMoney(outstanding)}.`)
       return
     }
 
-    const isOwner = user.role === 'owner'
-    const payment: Transaction = {
-      id: makeId('t'),
-      bookingId: booking.id,
-      customerId: booking.customerId,
-      date: formatDateInputValue(),
-      description: `${isOwner ? 'Confirmed' : 'Pending'} ${method} payment`,
-      amount: paymentAmount,
-      status: isOwner ? 'paid' : 'payment-pending',
-      type: 'payment',
-      method,
-      recordedById: user.id,
-      confirmedById: isOwner ? user.id : undefined,
-      createdAt: new Date().toISOString(),
+    const bookingPaymentAmount = isOwner
+      ? Math.min(paymentAmount, outstanding)
+      : paymentAmount
+    const creditAmount = isOwner ? paymentAmount - bookingPaymentAmount : 0
+    const payments: Transaction[] = []
+
+    if (bookingPaymentAmount > 0) {
+      payments.push({
+        id: makeId('t'),
+        bookingId: booking.id,
+        customerId: booking.customerId,
+        date: formatDateInputValue(),
+        description: `${isOwner ? 'Confirmed' : 'Pending'} ${method} payment`,
+        amount: bookingPaymentAmount,
+        status: isOwner ? 'paid' : 'payment-pending',
+        type: 'payment',
+        method,
+        recordedById: user.id,
+        confirmedById: isOwner ? user.id : undefined,
+        createdAt: new Date().toISOString(),
+      })
+    }
+
+    if (creditAmount > 0) {
+      payments.push({
+        id: makeId('t'),
+        customerId: booking.customerId,
+        date: formatDateInputValue(),
+        description: `Client credit from ${method} payment`,
+        amount: creditAmount,
+        status: 'paid',
+        type: 'payment',
+        method,
+        recordedById: user.id,
+        confirmedById: user.id,
+        createdAt: new Date().toISOString(),
+      })
     }
 
     setData((current) => ({
       ...current,
-      transactions: [payment, ...current.transactions],
+      transactions: [...payments, ...current.transactions],
     }))
     setAmount('')
   }
@@ -5410,7 +5449,7 @@ function PaymentControls({
             <input
               type="number"
               min="0"
-              max={outstanding}
+              max={user.role === 'owner' ? undefined : outstanding}
               step="0.5"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}

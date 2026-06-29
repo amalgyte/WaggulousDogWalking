@@ -378,7 +378,7 @@ test('recurring slot bookings can be halted and individual slots cancelled', asy
   expect(chargeDecision).toBe(true)
 })
 
-test('money only matures completed services and bulk payments allocate oldest first', async ({
+test('money matures completed services and allows client credit', async ({
   page,
 }) => {
   const walkDates = [
@@ -438,25 +438,35 @@ test('money only matures completed services and bulk payments allocate oldest fi
   await loginWithEmail(page, 'owner@waggulous.local')
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByRole('button', { name: 'Payments' }).click()
-  await expect(page.getByText(/Completed-service balance:/)).toContainText(
-    '£42.00',
+  await expect(page.getByText(/Client balance:/)).toContainText(
+    '£42.00 outstanding',
   )
   await page.getByLabel('Payment received', { exact: true }).fill('30')
   await page.getByRole('button', { name: /record client payment/i }).click()
   await expect(page.getByRole('status')).toContainText(
     '£30.00 payment recorded',
   )
-  await expect(page.getByText(/Completed-service balance:/)).toContainText(
-    '£12.00',
+  await expect(page.getByText(/Client balance:/)).toContainText(
+    '£12.00 outstanding',
   )
   await expect(page.getByText('Paid £14.00')).toHaveCount(2)
   await expect(
     page.getByText('Part paid £2.00 · £12.00 outstanding'),
   ).toBeVisible()
 
+  await page.getByLabel('Payment received', { exact: true }).fill('20')
+  await page.getByRole('button', { name: /record client payment/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    '£20.00 payment recorded',
+  )
+  await expect(page.getByText(/Client balance:/)).toContainText(
+    '£8.00 in credit',
+  )
+  await expect(page.getByText('Paid £14.00')).toHaveCount(3)
+
   const allocations = await page.evaluate(() => {
     const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
-    return data.bookings
+    const bookingPayments = data.bookings
       .filter((booking: { id: string }) => booking.id.startsWith('b-completed-'))
       .sort((a: { date: string }, b: { date: string }) =>
         a.date.localeCompare(b.date),
@@ -476,13 +486,33 @@ test('money only matures completed services and bulk payments allocate oldest fi
             0,
           ),
       }))
+
+    return {
+      bookingPayments,
+      credit: data.transactions
+        .filter(
+          (transaction: { bookingId?: string; customerId: string; status: string; type?: string }) =>
+            !transaction.bookingId &&
+            transaction.customerId === 'u-customer' &&
+            transaction.status === 'paid' &&
+            transaction.type === 'payment',
+        )
+        .reduce(
+          (total: number, transaction: { amount: number }) =>
+            total + transaction.amount,
+          0,
+        ),
+    }
   })
 
-  expect(allocations).toEqual([
-    { id: 'b-completed-1', paid: 14 },
-    { id: 'b-completed-2', paid: 14 },
-    { id: 'b-completed-3', paid: 2 },
-  ])
+  expect(allocations).toEqual({
+    bookingPayments: [
+      { id: 'b-completed-1', paid: 14 },
+      { id: 'b-completed-2', paid: 14 },
+      { id: 'b-completed-3', paid: 14 },
+    ],
+    credit: 8,
+  })
 })
 
 test('recurring requests support custom lengths and one-click approval', async ({
