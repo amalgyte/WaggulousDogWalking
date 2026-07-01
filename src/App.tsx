@@ -1662,14 +1662,7 @@ function OwnerDashboard({
                       type="button"
                       disabled={booking.status !== 'requested'}
                       onClick={() =>
-                        setData((current) => ({
-                          ...current,
-                          bookings: current.bookings.map((candidate) =>
-                            approvalTargetIds.includes(candidate.id)
-                              ? { ...candidate, status: 'declined' }
-                              : candidate,
-                          ),
-                        }))
+                        declineBooking(booking, data, setData, user.id)
                       }
                     >
                       <X size={16} />
@@ -1744,20 +1737,22 @@ function WalkerDashboard({
   setData: Dispatch<SetStateAction<AppData>>
   user: User
 }) {
-  const [tab, setTab] = useState<'jobs' | 'clients' | 'profile' | 'holidays'>(
-    'jobs',
-  )
+  const [tab, setTab] = useState<
+    'jobs' | 'clients' | 'profile' | 'holidays' | 'chat'
+  >('jobs')
   const today = formatDateInputValue()
   const claimWindowEnd = addDaysInputValue(today, 7)
   const navItems: [typeof tab, string][] = user.canSelfAssign
     ? [
         ['jobs', 'Jobs'],
         ['clients', 'Clients'],
+        ['chat', 'Messages'],
         ['profile', 'Profile'],
         ['holidays', 'Holidays'],
       ]
     : [
         ['jobs', 'Jobs'],
+        ['chat', 'Messages'],
         ['profile', 'Profile'],
         ['holidays', 'Holidays'],
       ]
@@ -2026,6 +2021,10 @@ function WalkerDashboard({
 
       {tab === 'clients' && user.canSelfAssign && (
         <ClientBookingPanel data={data} setData={setData} user={user} />
+      )}
+
+      {tab === 'chat' && (
+        <MessagesPanel data={data} setData={setData} user={user} />
       )}
 
       {tab === 'profile' && (
@@ -5531,6 +5530,58 @@ function approveBooking(
     ],
     messages: [
       ...approvalRecords.map((records) => records.message),
+      ...data.messages,
+    ],
+  })
+}
+
+function declineBooking(
+  booking: Booking,
+  data: AppData,
+  setData: Dispatch<SetStateAction<AppData>>,
+  ownerId: string,
+) {
+  const declineTargets = getApprovalTargetBookings(data, booking)
+  const declineTargetIds = declineTargets.map((candidate) => candidate.id)
+  const firstBooking = declineTargets[0] ?? booking
+  const service = data.services.find(
+    (candidate) => candidate.id === firstBooking.serviceId,
+  )
+  const messageBody =
+    declineTargets.length > 1
+      ? `We are sorry, but we cannot cover that recurring ${
+          service?.name ?? 'service'
+        } request. Please message us if you would like to choose another time.`
+      : `We are sorry, but we cannot cover your ${
+          service?.name ?? 'service'
+        } request for ${formatDate(firstBooking.date)}. Please message us if you would like to choose another time.`
+
+  setData({
+    ...data,
+    recurringBookings: firstBooking.recurringBookingId
+      ? data.recurringBookings.map((series) =>
+          series.id === firstBooking.recurringBookingId
+            ? { ...series, status: 'halted', haltedAt: new Date().toISOString() }
+            : series,
+        )
+      : data.recurringBookings,
+    bookings: data.bookings.map((candidate) =>
+      declineTargetIds.includes(candidate.id)
+        ? {
+            ...candidate,
+            status: 'declined',
+          }
+        : candidate,
+    ),
+    messages: [
+      {
+        id: makeId('m'),
+        bookingId: firstBooking.id,
+        senderId: ownerId,
+        recipientId: firstBooking.customerId,
+        body: messageBody,
+        createdAt: new Date().toISOString(),
+      },
       ...data.messages,
     ],
   })

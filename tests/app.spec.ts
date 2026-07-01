@@ -515,6 +515,209 @@ test('money matures completed services and allows client credit', async ({
   })
 })
 
+test('multi-household booking and walker exception workflows stay coherent', async ({
+  page,
+}) => {
+  test.setTimeout(60_000)
+  const nextMonday = dateInputForNextWeekday(1)
+  const nextTuesday = dateInputForNextWeekday(2)
+  const nextThursday = dateInputForNextWeekday(4)
+  const nextSaturday = dateInputForNextWeekday(6)
+  const households = [
+    ['u-hh-1', 'Ava Green', 'ava.green@example.com', 'Bracken', 'Dog', 's-walk-30', 'slot-walk-early', nextMonday, '07:00', '08:00'],
+    ['u-hh-2', 'Ben Clarke', 'ben.clarke@example.com', 'Milo', 'Dog', 's-walk-30', 'slot-walk-early', nextMonday, '07:00', '08:00'],
+    ['u-hh-3', 'Cora Patel', 'cora.patel@example.com', 'Luna', 'Dog', 's-walk-30', 'slot-walk-early', nextMonday, '07:00', '08:00'],
+    ['u-hh-4', 'Dylan Scott', 'dylan.scott@example.com', 'Rafi', 'Dog', 's-walk-30', 'slot-walk-early', nextMonday, '07:00', '08:00'],
+    ['u-hh-5', 'Eden Walsh', 'eden.walsh@example.com', 'Otis', 'Dog', 's-walk-30', 'slot-walk-early', nextMonday, '07:00', '08:00'],
+    ['u-hh-6', 'Farah Ali', 'farah.ali@example.com', 'Poppy', 'Dog', 's-walk-60', 'slot-walk-lunch', nextTuesday, '12:00', '13:00'],
+    ['u-hh-7', 'Gus Morgan', 'gus.morgan@example.com', 'Noodle', 'Cat', 's-pop-in', 'slot-pop-in-daily', nextSaturday, '10:00', '12:00'],
+    ['u-hh-8', 'Hana Reed', 'hana.reed@example.com', 'Pepper', 'Rabbit', 's-pop-in', 'slot-pop-in-daily', nextSaturday, '10:00', '12:00'],
+    ['u-hh-9', 'Imani Brooks', 'imani.brooks@example.com', 'Blue', 'Dog', 's-walk-30', 'slot-walk-evening', nextThursday, '18:00', '19:00'],
+    ['u-hh-10', 'Jon Bell', 'jon.bell@example.com', 'Mochi', 'Cat', 's-pop-in', 'slot-pop-in-daily', nextTuesday, '10:00', '12:00'],
+    ['u-hh-11', 'Kara Stone', 'kara.stone@example.com', 'Scout', 'Dog', 's-walk-60', 'slot-walk-lunch', nextThursday, '12:00', '13:00'],
+    ['u-hh-12', 'Leo Chen', 'leo.chen@example.com', 'Fern', 'Dog', 's-walk-30', 'slot-walk-evening', nextMonday, '18:00', '19:00'],
+  ]
+
+  await page.evaluate((seedHouseholds) => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    const reliefWalker = {
+      id: 'u-relief',
+      name: 'Relief Walker',
+      email: 'relief@waggulous.local',
+      password: 'demo',
+      role: 'walker',
+      phone: '07700 900555',
+      address: '4 Spare Lead Lane',
+      canSelfAssign: true,
+    }
+    const users = seedHouseholds.map(
+      ([id, name, email]: string[]) => ({
+        id,
+        name,
+        email,
+        password: 'demo',
+        role: 'customer',
+      }),
+    )
+    const pets = seedHouseholds.map(
+      ([userId, , , petName, species]: string[], index: number) => ({
+        id: `p-hh-${index + 1}`,
+        ownerId: userId,
+        name: petName,
+        species,
+        breed: species === 'Dog' ? 'Mixed breed' : species,
+        age: String(2 + (index % 7)),
+        notes: `Household ${index + 1} care notes.`,
+      }),
+    )
+    const bookings = seedHouseholds.map(
+      (
+        [userId, , , petName, , serviceId, slotId, date, time, endTime]: string[],
+        index: number,
+      ) => ({
+        id: `b-hh-${index + 1}`,
+        customerId: userId,
+        petIds: [`p-hh-${index + 1}`],
+        serviceId,
+        slotId,
+        date,
+        time,
+        endTime,
+        notes: `Client web request for ${petName}.`,
+        status: 'requested',
+        price: serviceId === 's-walk-60' ? 22 : 14,
+      }),
+    )
+
+    localStorage.setItem(
+      'waggulous-mvp-data',
+      JSON.stringify({
+        ...data,
+        users: [...data.users, reliefWalker, ...users],
+        pets: [...data.pets, ...pets],
+        bookings: [...bookings, ...data.bookings],
+      }),
+    )
+  }, households)
+  await page.reload()
+
+  const seededCounts = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return {
+      households: data.users.filter((user: { id: string }) =>
+        user.id.startsWith('u-hh-'),
+      ).length,
+      requested: data.bookings.filter((booking: { id: string; status: string }) =>
+        booking.id.startsWith('b-hh-') && booking.status === 'requested',
+      ).length,
+    }
+  })
+  expect(seededCounts).toEqual({ households: 12, requested: 12 })
+
+  await loginWithEmail(page, 'owner@waggulous.local')
+  for (const petName of ['Bracken', 'Milo', 'Luna', 'Rafi', 'Otis']) {
+    const row = page.locator('article').filter({ hasText: petName })
+    await row.getByRole('combobox').selectOption('u-walker')
+    await row.getByRole('button', { name: /^Approve$/ }).click()
+    await expect(row).toContainText('approved')
+  }
+
+  const declinedRow = page.locator('article').filter({ hasText: 'Poppy' })
+  await declinedRow.getByRole('button', { name: /^Decline$/ }).click()
+  await expect(declinedRow).toContainText('declined')
+
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByRole('button', { name: 'Appointment' }).click()
+  await page.locator('form').getByRole('combobox').first().selectOption('u-hh-8')
+  await page.getByRole('checkbox', { name: 'Pepper' }).check()
+  await page.getByLabel('Service').selectOption('s-evening')
+  await page.getByLabel('Date', { exact: true }).fill(nextSaturday)
+  await page.getByLabel('Time', { exact: true }).fill('18:30')
+  await page
+    .getByRole('textbox', { name: 'Booking notes' })
+    .fill('Email request: owner entered evening sit for Pepper.')
+  await page.getByRole('button', { name: /add approved booking/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'Approved Evening sit booking added for Hana Reed',
+  )
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'farah.ali@example.com')
+  await page.getByRole('button', { name: 'Messages' }).click()
+  await expect(page.getByText(/cannot cover your 60 minute adventure walk/i)).toBeVisible()
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'walker@waggulous.local')
+  await page.getByRole('button', { name: 'Messages' }).click()
+  await page
+    .getByRole('textbox', { name: 'Message' })
+    .fill('I cannot safely take all five early dogs in one route. Please split the session or ask two clients if they prefer a later walk.')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText(/cannot safely take all five early dogs/i)).toBeVisible()
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'owner@waggulous.local')
+  await page.getByRole('button', { name: 'Messages' }).click()
+  await expect(page.getByText(/split the session/i)).toBeVisible()
+
+  await page.getByRole('button', { name: 'Staff' }).click()
+  await page
+    .locator('article')
+    .filter({ hasText: 'Alex Walker' })
+    .getByRole('button', { name: /view profile and appointments/i })
+    .click()
+  for (const petName of ['Luna', 'Rafi']) {
+    const staffRow = page.locator('article').filter({ hasText: petName })
+    await staffRow.getByLabel('Reassign').selectOption('u-relief')
+    await expect(staffRow).toHaveCount(0)
+  }
+
+  await page.getByRole('button', { name: 'Messages' }).click()
+  await page.getByLabel('To').selectOption('u-hh-3')
+  await page
+    .getByRole('textbox', { name: 'Message' })
+    .fill('Alex flagged the early route is too full. Would you prefer Luna to walk with our relief walker or move to a later session?')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText(/Would you prefer Luna/i)).toBeVisible()
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'cora.patel@example.com')
+  await page.getByRole('button', { name: 'Messages' }).click()
+  await expect(page.getByText(/relief walker or move to a later session/i)).toBeVisible()
+
+  const finalState = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return {
+      alexEarlyDogs: data.bookings.filter(
+        (booking: { walkerId?: string; id: string; status: string }) =>
+          booking.walkerId === 'u-walker' &&
+          booking.id.startsWith('b-hh-') &&
+          booking.status === 'approved',
+      ).length,
+      reliefDogs: data.bookings.filter(
+        (booking: { walkerId?: string; id: string; status: string }) =>
+          booking.walkerId === 'u-relief' && booking.id.startsWith('b-hh-'),
+      ).length,
+      declined: data.bookings.some(
+        (booking: { id: string; status: string }) =>
+          booking.id === 'b-hh-6' && booking.status === 'declined',
+      ),
+      ownerEnteredBooking: data.bookings.some(
+        (booking: { customerId: string; serviceId: string; notes: string }) =>
+          booking.customerId === 'u-hh-8' &&
+          booking.serviceId === 's-evening' &&
+          booking.notes.includes('Email request'),
+      ),
+    }
+  })
+  expect(finalState).toEqual({
+    alexEarlyDogs: 3,
+    reliefDogs: 2,
+    declined: true,
+    ownerEnteredBooking: true,
+  })
+})
+
 test('recurring requests support custom lengths and one-click approval', async ({
   page,
 }) => {
