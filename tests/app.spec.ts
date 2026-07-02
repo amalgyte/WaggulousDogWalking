@@ -294,6 +294,48 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(page.getByText('in progress')).toBeVisible()
 })
 
+test('owner services layout keeps slots readable on laptop screens', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await loginWithEmail(page, 'owner@waggulous.local')
+  await page.getByRole('button', { name: 'Services' }).click()
+
+  const walkServiceRow = page
+    .locator('.service-admin-row')
+    .filter({ hasText: '30 minute walk' })
+    .first()
+  await expect(walkServiceRow).toBeVisible()
+
+  const layout = await walkServiceRow.evaluate((row) => {
+    const slots = row.querySelector('.slot-list')
+    const firstSlot = slots?.querySelector('label')
+    const controls = row.querySelector('.service-admin-controls')
+
+    if (!slots || !firstSlot || !controls) {
+      return null
+    }
+
+    const slotsRect = slots.getBoundingClientRect()
+    const firstSlotRect = firstSlot.getBoundingClientRect()
+    const controlsRect = controls.getBoundingClientRect()
+
+    return {
+      controlsBelowSlots: controlsRect.top >= slotsRect.bottom - 1,
+      firstSlotWidth: firstSlotRect.width,
+      slotsWidth: slotsRect.width,
+    }
+  })
+
+  if (!layout) {
+    throw new Error('Expected service row to contain slots and controls.')
+  }
+
+  expect(layout.slotsWidth).toBeGreaterThan(480)
+  expect(layout.firstSlotWidth).toBeGreaterThan(180)
+  expect(layout.controlsBelowSlots).toBe(true)
+})
+
 test('recurring slot bookings can be halted and individual slots cancelled', async ({
   page,
 }) => {

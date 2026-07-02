@@ -4876,13 +4876,15 @@ function ServicesPanel({
       <div className="service-admin-list">
         {data.services.map((service) => (
           <article className="service-admin-row" key={service.id}>
-            <div>
-              <h3>{service.name}</h3>
-              <p>
-                {service.type} · {service.duration}
-              </p>
-              <p className="muted">{service.description}</p>
-              <p className="muted">{multiPetPricingLabel(service)}</p>
+            <div className="service-admin-details">
+              <div className="service-admin-copy">
+                <h3>{service.name}</h3>
+                <p>
+                  {service.type} · {service.duration}
+                </p>
+                <p className="muted">{service.description}</p>
+                <p className="muted">{multiPetPricingLabel(service)}</p>
+              </div>
               <div className="slot-list">
                 {data.serviceSlots
                   .filter((slot) => slot.serviceId === service.id)
