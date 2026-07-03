@@ -593,6 +593,22 @@ a:focus-visible {
   margin-top: 10px;
 }
 
+.service-admin-details,
+.service-admin-copy {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.slot-list .toggle-label {
+  align-items: flex-start;
+  background: var(--soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  line-height: 1.35;
+  padding: 10px 12px;
+}
+
 .booking-row,
 .service-admin-row,
 .message-row {
@@ -602,9 +618,32 @@ a:focus-visible {
 
 .row-actions,
 .service-admin-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.row-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+}
+
+.service-admin-controls {
+  align-items: end;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+}
+
+.service-admin-controls label {
+  min-width: 0;
+}
+
+.service-admin-controls input:not([type='checkbox']),
+.service-admin-controls select {
+  width: 100%;
+}
+
+.service-admin-controls .toggle-label {
+  align-self: end;
+  min-height: 44px;
 }
 
 .row-actions select {
@@ -1021,10 +1060,18 @@ tr:last-child td {
   }
 
   .booking-row,
-  .service-admin-row,
   .message-row {
     align-items: center;
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .service-admin-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .slot-list {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   }
 }
 
@@ -1057,5 +1104,14 @@ tr:last-child td {
   .dashboard-nav button {
     justify-content: flex-start;
     text-align: left;
+  }
+
+  .service-admin-details {
+    align-items: start;
+    grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
+  }
+
+  .service-admin-details .slot-list {
+    margin-top: 0;
   }
 }
