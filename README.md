@@ -14,8 +14,10 @@ Mobile-first PWA MVP for a dog walking and pet sitting business.
 - Staff records with name, address, phone, email, avatar, login credentials, and owner-controlled self-assignment permission.
 - Staff workspace for authorised jobs, approved-staff verbal client booking, staff-recorded pending payments, next-7-day unassigned request and appointment claiming with approval confirmation, profile maintenance, avatar updates, and all-day or timed start/end availability management.
 - Booking-linked messaging between roles.
+- Firebase Realtime Database sync for the shared app data store, with browser
+  `localStorage` retained as the immediate startup/offline cache.
 
-This MVP stores data in browser `localStorage`. Payment account details are deliberately not stored because payments are expected to be handled by an outsourced service.
+Payment account details are deliberately not stored because payments are expected to be handled by an outsourced service.
 
 ## Demo accounts
 
@@ -36,6 +38,7 @@ npm test
 ```
 
 The dev app runs at `http://127.0.0.1:5173/`.
+Set `VITE_WAGGULOUS_STORAGE=local` when you need a local-only run that does not read or write Firebase.
 
 ## Verification
 
