@@ -1,23 +1,34 @@
 import {
+  Bird,
   CalendarDays,
+  Cat,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   CreditCard,
   Dog,
+  Fish,
   LogOut,
   Menu,
   MessageCircle,
+  Minus,
+  Mouse,
   Palette,
   PawPrint,
   Plus,
+  Rabbit,
   ShieldCheck,
   Sparkles,
+  Turtle,
   UserRound,
   WalletCards,
   X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { onValue, set } from 'firebase/database'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import type {
+  CSSProperties,
   ChangeEvent,
   Dispatch,
   FormEvent,
@@ -25,6 +36,7 @@ import type {
   SetStateAction,
 } from 'react'
 import heroImage from './assets/waggulous-hero.png'
+import { appDataRef } from './firebase'
 import './App.css'
 
 type Role = 'customer' | 'owner' | 'walker'
@@ -170,8 +182,11 @@ type Message = {
   createdAt: string
 }
 
+type PetSpeciesColours = Record<string, string>
+
 type AppData = {
   themeId: ThemeId
+  petSpeciesColours: PetSpeciesColours
   users: User[]
   pets: Pet[]
   services: Service[]
@@ -184,6 +199,8 @@ type AppData = {
 
 const storageKey = 'waggulous-mvp-data'
 const sessionKey = 'waggulous-session-user'
+const shouldSyncFirebase =
+  import.meta.env.VITE_WAGGULOUS_STORAGE !== 'local' && !navigator.webdriver
 const siteThemes: {
   id: ThemeId
   name: string
@@ -341,8 +358,26 @@ const dayOptions = [
   ['6', 'Sat'],
 ] as const
 
+const defaultPetSpeciesColours: PetSpeciesColours = {
+  dog: '#3f7f59',
+  cat: '#b86f28',
+  bird: '#1e7f9f',
+  rabbit: '#8c6ab8',
+  fish: '#247cc9',
+  turtle: '#4f7f3f',
+  hamster: '#a76c42',
+  mouse: '#8b7a70',
+  gerbil: '#a17344',
+  pet: '#5f6f64',
+}
+
+const PetSpeciesColourContext = createContext<PetSpeciesColours>(
+  defaultPetSpeciesColours,
+)
+
 const seedData: AppData = {
   themeId: 'waggulous',
+  petSpeciesColours: defaultPetSpeciesColours,
   users: [
     {
       id: 'u-owner',
@@ -379,6 +414,74 @@ const seedData: AppData = {
       email: 'sam@example.com',
       password: 'demo',
       role: 'customer',
+      phone: '07700 900101',
+      address: '12 River Walk, Bristol',
+    },
+    {
+      id: 'u-maya',
+      name: 'Maya Chen',
+      email: 'maya@waggulous.local',
+      password: 'demo',
+      role: 'walker',
+      phone: '07700 900333',
+      address: '8 Orchard Terrace, Bristol',
+      canSelfAssign: true,
+    },
+    {
+      id: 'u-priya',
+      name: 'Priya Shah',
+      email: 'priya@waggulous.local',
+      password: 'demo',
+      role: 'walker',
+      phone: '07700 900444',
+      address: '19 Willow Road, Bristol',
+      canSelfAssign: true,
+    },
+    {
+      id: 'u-tom',
+      name: 'Tom Evans',
+      email: 'tom@waggulous.local',
+      password: 'demo',
+      role: 'walker',
+      phone: '07700 900555',
+      address: '3 Clifton Mews, Bristol',
+      canSelfAssign: false,
+    },
+    {
+      id: 'u-eliza',
+      name: 'Eliza Moore',
+      email: 'eliza.moore@example.com',
+      password: 'demo',
+      role: 'customer',
+      phone: '07700 910101',
+      address: '24 Sycamore Avenue, Bristol',
+    },
+    {
+      id: 'u-omar',
+      name: 'Omar Khan',
+      email: 'omar.khan@example.com',
+      password: 'demo',
+      role: 'customer',
+      phone: '07700 910202',
+      address: '7 Harbour View, Bristol',
+    },
+    {
+      id: 'u-grace',
+      name: 'Grace Bell',
+      email: 'grace.bell@example.com',
+      password: 'demo',
+      role: 'customer',
+      phone: '07700 910303',
+      address: '41 Meadowbank Road, Bristol',
+    },
+    {
+      id: 'u-theo',
+      name: 'Theo Harris',
+      email: 'theo.harris@example.com',
+      password: 'demo',
+      role: 'customer',
+      phone: '07700 910404',
+      address: '16 Kingsdown Parade, Bristol',
     },
   ],
   pets: [
@@ -399,6 +502,87 @@ const seedData: AppData = {
       breed: 'Domestic shorthair',
       age: '8',
       notes: 'Needs evening feeding and a litter tray check.',
+    },
+    {
+      id: 'p-rufus',
+      ownerId: 'u-eliza',
+      name: 'Rufus',
+      species: 'Dog',
+      breed: 'Border Terrier',
+      age: '6',
+      notes: 'Can be stubborn near the bakery. Treats in the porch cupboard.',
+    },
+    {
+      id: 'p-tilly',
+      ownerId: 'u-eliza',
+      name: 'Tilly',
+      species: 'Cat',
+      breed: 'Maine Coon',
+      age: '5',
+      notes: 'Brush briefly after feeding and keep the kitchen window closed.',
+    },
+    {
+      id: 'p-nori',
+      ownerId: 'u-omar',
+      name: 'Nori',
+      species: 'Bird',
+      breed: 'Cockatiel',
+      age: '3',
+      notes: 'Fresh water, seed top-up, and ten minutes of quiet company.',
+    },
+    {
+      id: 'p-biscuit',
+      ownerId: 'u-omar',
+      name: 'Biscuit',
+      species: 'Rabbit',
+      breed: 'Mini Lop',
+      age: '2',
+      notes: 'Check hay rack and make sure the garden run latch is clipped.',
+    },
+    {
+      id: 'p-luna',
+      ownerId: 'u-grace',
+      name: 'Luna',
+      species: 'Dog',
+      breed: 'Whippet',
+      age: '4',
+      notes: 'Nervous around skateboards. Use the yellow lead for walks.',
+    },
+    {
+      id: 'p-miso',
+      ownerId: 'u-grace',
+      name: 'Miso',
+      species: 'Dog',
+      breed: 'Shih Tzu',
+      age: '9',
+      notes: 'Shorter route only and wipe paws before coming inside.',
+    },
+    {
+      id: 'p-goldie',
+      ownerId: 'u-theo',
+      name: 'Goldie',
+      species: 'Fish',
+      breed: 'Goldfish',
+      age: '1',
+      notes: 'One small pinch of food. Do not top up the tank.',
+    },
+    {
+      id: 'p-shelly',
+      ownerId: 'u-theo',
+      name: 'Shelly',
+      species: 'Turtle',
+      breed: 'Musk turtle',
+      age: '7',
+      notes: 'Check basking lamp and remove any leftover greens.',
+    },
+    {
+      id: 'p-peanut',
+      ownerId: 'u-theo',
+      name: 'Peanut',
+      species: 'Hamster',
+      breed: 'Syrian hamster',
+      age: '1',
+      notes: 'Evening check only. Food scoop is beside the enclosure.',
     },
   ],
   services: [
@@ -496,6 +680,141 @@ const seedData: AppData = {
       walkerId: 'u-walker',
     },
     {
+      id: 'b-demo-1',
+      customerId: 'u-customer',
+      petIds: ['p-pip'],
+      serviceId: 's-pop-in',
+      slotId: 'slot-pop-in-daily',
+      date: formatDateInputValue(),
+      time: '10:30',
+      endTime: '10:55',
+      notes: 'Pip needs food, water, and litter checked before lunch.',
+      status: 'approved',
+      price: 12,
+      walkerId: 'u-maya',
+    },
+    {
+      id: 'b-demo-2',
+      customerId: 'u-eliza',
+      petIds: ['p-rufus'],
+      serviceId: 's-walk-30',
+      slotId: 'slot-walk-early',
+      date: addDaysInputValue(formatDateInputValue(), 1),
+      time: '07:30',
+      endTime: '08:00',
+      notes: 'Rufus is best walked before the school run gets busy.',
+      status: 'approved',
+      price: 14,
+      walkerId: 'u-walker',
+    },
+    {
+      id: 'b-demo-3',
+      customerId: 'u-omar',
+      petIds: ['p-nori', 'p-biscuit'],
+      serviceId: 's-pop-in',
+      slotId: 'slot-pop-in-daily',
+      date: addDaysInputValue(formatDateInputValue(), 1),
+      time: '10:00',
+      endTime: '10:35',
+      notes: 'Quiet visit for Nori, then check Biscuit has hay and water.',
+      status: 'approved',
+      price: 12,
+      walkerId: 'u-priya',
+    },
+    {
+      id: 'b-demo-4',
+      customerId: 'u-grace',
+      petIds: ['p-luna', 'p-miso'],
+      serviceId: 's-walk-60',
+      slotId: 'slot-walk-lunch',
+      date: addDaysInputValue(formatDateInputValue(), 1),
+      time: '12:30',
+      endTime: '13:30',
+      notes: 'Keep Miso to the flatter route and give Luna space near roads.',
+      status: 'approved',
+      price: 22,
+      walkerId: 'u-maya',
+    },
+    {
+      id: 'b-demo-5',
+      customerId: 'u-theo',
+      petIds: ['p-goldie', 'p-shelly', 'p-peanut'],
+      serviceId: 's-pop-in',
+      slotId: 'slot-pop-in-daily',
+      date: addDaysInputValue(formatDateInputValue(), 2),
+      time: '09:15',
+      endTime: '09:45',
+      notes: 'Small pet care round: fish feed, turtle lamp, hamster food.',
+      status: 'approved',
+      price: 12,
+      walkerId: 'u-tom',
+    },
+    {
+      id: 'b-demo-6',
+      customerId: 'u-eliza',
+      petIds: ['p-rufus', 'p-tilly'],
+      serviceId: 's-pop-in',
+      date: addDaysInputValue(formatDateInputValue(), 2),
+      time: '14:00',
+      endTime: '14:30',
+      notes: 'Requested afternoon check while Eliza is at a work event.',
+      status: 'requested',
+      price: 12,
+    },
+    {
+      id: 'b-demo-7',
+      customerId: 'u-eliza',
+      petIds: ['p-rufus'],
+      serviceId: 's-walk-30',
+      slotId: 'slot-walk-early',
+      date: addDaysInputValue(formatDateInputValue(), 3),
+      time: '08:00',
+      endTime: '08:30',
+      notes: 'Rufus can join the early neighbourhood loop.',
+      status: 'approved',
+      price: 14,
+      walkerId: 'u-priya',
+    },
+    {
+      id: 'b-demo-8',
+      customerId: 'u-grace',
+      petIds: ['p-luna'],
+      serviceId: 's-walk-30',
+      date: addDaysInputValue(formatDateInputValue(), 3),
+      time: '11:30',
+      endTime: '12:00',
+      notes: 'Grace asked whether Luna can have a quieter mid-morning walk.',
+      status: 'requested',
+      price: 14,
+    },
+    {
+      id: 'b-demo-9',
+      customerId: 'u-customer',
+      petIds: ['p-pip'],
+      serviceId: 's-evening',
+      date: addDaysInputValue(formatDateInputValue(), 3),
+      time: '18:30',
+      endTime: '20:30',
+      notes: 'Evening companionship and feeding while Sam is away.',
+      status: 'approved',
+      price: 38,
+      walkerId: 'u-priya',
+    },
+    {
+      id: 'b-demo-10',
+      customerId: 'u-grace',
+      petIds: ['p-luna', 'p-miso'],
+      serviceId: 's-walk-30',
+      slotId: 'slot-walk-evening',
+      date: addDaysInputValue(formatDateInputValue(), 4),
+      time: '18:00',
+      endTime: '18:45',
+      notes: 'Evening loop after the pavement cools down.',
+      status: 'approved',
+      price: 14,
+      walkerId: 'u-walker',
+    },
+    {
       id: 'b-2',
       customerId: 'u-customer',
       petIds: ['p-pip'],
@@ -547,15 +866,86 @@ function loadData(): AppData {
   if (!saved) return seedData
 
   try {
-    const parsed = JSON.parse(saved) as AppData
-    return {
-      ...parsed,
-      themeId: isThemeId(parsed.themeId) ? parsed.themeId : seedData.themeId,
-      serviceSlots: parsed.serviceSlots ?? seedData.serviceSlots,
-      recurringBookings: parsed.recurringBookings ?? [],
-    }
+    return normaliseAppData(JSON.parse(saved))
   } catch {
     return seedData
+  }
+}
+
+function normaliseCollection<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[]
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, T>)
+  }
+  return []
+}
+
+function normaliseAppData(value: unknown): AppData {
+  const data =
+    value && typeof value === 'object' ? (value as Partial<AppData>) : {}
+
+  return mergeDemoSeedData({
+    themeId: isThemeId(data.themeId) ? data.themeId : seedData.themeId,
+    petSpeciesColours: mergePetSpeciesColours(data.petSpeciesColours),
+    users: normaliseCollection<User>(data.users),
+    pets: normaliseCollection<Pet>(data.pets),
+    services: normaliseCollection<Service>(data.services),
+    serviceSlots: normaliseCollection<ServiceSlot>(data.serviceSlots),
+    recurringBookings: normaliseCollection<RecurringBooking>(
+      data.recurringBookings,
+    ),
+    bookings: normaliseCollection<Booking>(data.bookings),
+    transactions: normaliseCollection<Transaction>(data.transactions),
+    messages: normaliseCollection<Message>(data.messages),
+  })
+}
+
+function mergeCollectionById<T extends { id: string }>(
+  current: T[],
+  seeded: T[],
+) {
+  const currentIds = new Set(current.map((item) => item.id))
+  return [...current, ...seeded.filter((item) => !currentIds.has(item.id))]
+}
+
+function mergeSeededUsers(current: User[]) {
+  const seededById = new Map(seedData.users.map((user) => [user.id, user]))
+  const merged = mergeCollectionById(current, seedData.users)
+
+  return merged.map((user) => {
+    const seeded = seededById.get(user.id)
+    if (!seeded) return user
+
+    return {
+      ...seeded,
+      ...user,
+      phone: user.phone ?? seeded.phone,
+      address: user.address ?? seeded.address,
+      avatar: user.avatar ?? seeded.avatar,
+      canSelfAssign: user.canSelfAssign ?? seeded.canSelfAssign,
+      holidays: user.holidays ?? seeded.holidays,
+    }
+  })
+}
+
+function mergeDemoSeedData(data: AppData): AppData {
+  return {
+    ...data,
+    petSpeciesColours: mergePetSpeciesColours(data.petSpeciesColours),
+    users: mergeSeededUsers(data.users ?? []),
+    pets: mergeCollectionById(data.pets ?? [], seedData.pets),
+    services: mergeCollectionById(data.services ?? [], seedData.services),
+    serviceSlots: mergeCollectionById(
+      data.serviceSlots ?? [],
+      seedData.serviceSlots,
+    ),
+    recurringBookings: data.recurringBookings ?? [],
+    bookings: mergeCollectionById(data.bookings ?? [], seedData.bookings),
+    transactions: mergeCollectionById(
+      data.transactions ?? [],
+      seedData.transactions,
+    ),
+    messages: mergeCollectionById(data.messages ?? [], seedData.messages),
   }
 }
 
@@ -814,8 +1204,188 @@ function formatBookingTime(booking: Booking) {
     : booking.time
 }
 
+function timeToMinutes(time: string) {
+  const [hours = '0', minutes = '0'] = time.split(':')
+  return Number(hours) * 60 + Number(minutes)
+}
+
+function minutesToTimeLabel(minutes: number) {
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  const period = hours >= 12 ? 'pm' : 'am'
+  const displayHour = hours % 12 || 12
+  return mins === 0
+    ? `${displayHour}${period}`
+    : `${displayHour}:${String(mins).padStart(2, '0')}${period}`
+}
+
+function getBookingDurationMinutes(booking: Booking, service?: Service) {
+  if (booking.endTime) {
+    const diff = timeToMinutes(booking.endTime) - timeToMinutes(booking.time)
+    if (diff > 0) return diff
+  }
+
+  const duration = service?.duration.toLowerCase() ?? ''
+  const amount = Number(duration.match(/\d+/)?.[0] ?? 0)
+  if (duration.includes('hour') && amount > 0) return amount * 60
+  if (amount > 0) return amount
+
+  return 45
+}
+
+function getDateRangeDates(startDate: string, dayCount: number) {
+  return Array.from({ length: dayCount }, (_, index) =>
+    addDaysInputValue(startDate, index),
+  )
+}
+
+function formatTimelineRangeLabel(startDate: string, dayCount: number) {
+  if (dayCount === 1) return formatDate(startDate)
+
+  const endDate = addDaysInputValue(startDate, dayCount - 1)
+  return `${formatDate(startDate)} to ${formatDate(endDate)}`
+}
+
 function statusLabel(status: BookingStatus) {
   return status.replace('-', ' ')
+}
+
+function normaliseSpecies(species: string) {
+  return species.trim().toLowerCase()
+}
+
+function petSpeciesColourKey(species: string) {
+  return normaliseSpecies(species) || 'pet'
+}
+
+function isHexColour(value: unknown): value is string {
+  return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value)
+}
+
+function mergePetSpeciesColours(
+  colours: Partial<PetSpeciesColours> | undefined,
+) {
+  return Object.entries(colours ?? {}).reduce<PetSpeciesColours>(
+    (merged, [species, colour]) => {
+      const key = petSpeciesColourKey(species)
+      if (!isHexColour(colour)) return merged
+
+      return {
+        ...merged,
+        [key]: colour.toLowerCase(),
+      }
+    },
+    { ...defaultPetSpeciesColours },
+  )
+}
+
+function getPetSpeciesColour(colours: PetSpeciesColours, species: string) {
+  return (
+    colours[petSpeciesColourKey(species)] ??
+    colours.pet ??
+    defaultPetSpeciesColours.pet
+  )
+}
+
+function petSpeciesColourStyle(
+  colours: PetSpeciesColours,
+  species: string,
+): CSSProperties {
+  return {
+    '--pet-species-colour': getPetSpeciesColour(colours, species),
+  } as CSSProperties
+}
+
+function formatSpeciesLabel(species: string) {
+  return species
+    .split(/[\s-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
+function getPetSpeciesColourEntries(data: AppData) {
+  const keys = new Set([
+    ...Object.keys(defaultPetSpeciesColours),
+    ...data.pets.map((pet) => petSpeciesColourKey(pet.species)),
+  ])
+  const colours = mergePetSpeciesColours(data.petSpeciesColours)
+
+  return [...keys].map((key) => ({
+    colour: getPetSpeciesColour(colours, key),
+    key,
+    label: formatSpeciesLabel(key),
+  }))
+}
+
+function PetSpeciesIcon({
+  species,
+  size = 14,
+  colour,
+}: {
+  species: string
+  size?: number
+  colour?: string
+}) {
+  const colourMap = useContext(PetSpeciesColourContext)
+  const speciesKey = normaliseSpecies(species)
+  const Icon =
+    speciesKey === 'dog'
+      ? Dog
+      : speciesKey === 'cat'
+        ? Cat
+        : speciesKey === 'bird'
+          ? Bird
+          : speciesKey === 'rabbit'
+            ? Rabbit
+            : speciesKey === 'fish'
+              ? Fish
+              : speciesKey === 'turtle'
+                ? Turtle
+                : speciesKey === 'hamster' ||
+                    speciesKey === 'mouse' ||
+                    speciesKey === 'gerbil'
+                  ? Mouse
+                  : PawPrint
+
+  return (
+    <Icon
+      aria-label={species || 'Pet'}
+      className="pet-species-icon"
+      role="img"
+      size={size}
+      style={{
+        '--pet-species-colour':
+          colour ?? getPetSpeciesColour(colourMap, species),
+      } as CSSProperties}
+    />
+  )
+}
+
+function PetNameChip({ pet }: { pet: Pet }) {
+  const colourMap = useContext(PetSpeciesColourContext)
+
+  return (
+    <span
+      className="pet-name-chip"
+      style={petSpeciesColourStyle(colourMap, pet.species)}
+    >
+      <PetSpeciesIcon species={pet.species} />
+      {pet.name}
+    </span>
+  )
+}
+
+function PetInlineList({ pets }: { pets: Pet[] }) {
+  if (pets.length === 0) return <>None</>
+
+  return (
+    <span className="pet-inline-list">
+      {pets.map((pet) => (
+        <PetNameChip key={pet.id} pet={pet} />
+      ))}
+    </span>
+  )
 }
 
 function serviceSlotLabel(slot: ServiceSlot) {
@@ -942,6 +1512,9 @@ function resetScroll() {
 
 function App() {
   const [data, setData] = useState<AppData>(() => loadData())
+  const latestDataRef = useRef(data)
+  const hasFirebaseSnapshotRef = useRef(false)
+  const lastFirebaseJsonRef = useRef<string | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(() =>
     localStorage.getItem(sessionKey),
   )
@@ -951,6 +1524,10 @@ function App() {
   const currentUser = data.users.find((user) => user.id === currentUserId)
 
   useEffect(() => {
+    latestDataRef.current = data
+  }, [data])
+
+  useEffect(() => {
     const theme = getTheme(data.themeId)
     Object.entries(theme.variables).forEach(([property, value]) => {
       document.documentElement.style.setProperty(property, value)
@@ -958,7 +1535,63 @@ function App() {
   }, [data.themeId])
 
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(data))
+    if (!shouldSyncFirebase) return
+
+    return onValue(
+      appDataRef,
+      (snapshot) => {
+        hasFirebaseSnapshotRef.current = true
+
+        if (!snapshot.exists()) {
+          const seededData = normaliseAppData(latestDataRef.current)
+          const seededJson = JSON.stringify(seededData)
+          lastFirebaseJsonRef.current = seededJson
+          void set(appDataRef, seededData).catch((error) => {
+            console.warn('Waggulous Firebase seed write failed', error)
+          })
+          return
+        }
+
+        const nextData = normaliseAppData(snapshot.val())
+        const nextJson = JSON.stringify(nextData)
+        lastFirebaseJsonRef.current = nextJson
+
+        setData((current) =>
+          JSON.stringify(normaliseAppData(current)) === nextJson
+            ? current
+            : nextData,
+        )
+      },
+      (error) => {
+        console.warn('Waggulous Firebase sync failed', error)
+      },
+    )
+  }, [])
+
+  useEffect(() => {
+    const nextData = normaliseAppData(data)
+    const nextJson = JSON.stringify(nextData)
+    localStorage.setItem(storageKey, nextJson)
+
+    if (
+      !shouldSyncFirebase ||
+      !hasFirebaseSnapshotRef.current ||
+      nextJson === lastFirebaseJsonRef.current
+    ) {
+      return
+    }
+
+    const saveTimer = window.setTimeout(() => {
+      void set(appDataRef, nextData)
+        .then(() => {
+          lastFirebaseJsonRef.current = nextJson
+        })
+        .catch((error) => {
+          console.warn('Waggulous Firebase save failed', error)
+        })
+    }, 250)
+
+    return () => window.clearTimeout(saveTimer)
   }, [data])
 
   useEffect(() => {
@@ -987,6 +1620,8 @@ function App() {
     }
   }, [currentUserId])
 
+  const petSpeciesColours = mergePetSpeciesColours(data.petSpeciesColours)
+
   function startSession(userId: string) {
     resetScroll()
     setCurrentUserId(userId)
@@ -1000,43 +1635,47 @@ function App() {
 
   if (currentUser) {
     return (
-      <DashboardShell
-        data={data}
-        setData={setData}
-        user={currentUser}
-        onSignOut={signOut}
-      />
+      <PetSpeciesColourContext.Provider value={petSpeciesColours}>
+        <DashboardShell
+          data={data}
+          setData={setData}
+          user={currentUser}
+          onSignOut={signOut}
+        />
+      </PetSpeciesColourContext.Provider>
     )
   }
 
   return (
-    <main>
-      <SiteHeader
-        mobileMenuOpen={mobileMenuOpen}
-        onToggleMenu={() => setMobileMenuOpen((open) => !open)}
-      />
-      <LandingPage
-        authMode={authMode}
-        data={data}
-        mobileMenuOpen={mobileMenuOpen}
-        onAuthModeChange={setAuthMode}
-        onLogin={startSession}
-        onSignup={(name, email, password) => {
-          const newUser: User = {
-            id: makeId('u'),
-            name,
-            email,
-            password,
-            role: 'customer',
-          }
-          setData((current) => ({
-            ...current,
-            users: [...current.users, newUser],
-          }))
-          startSession(newUser.id)
-        }}
-      />
-    </main>
+    <PetSpeciesColourContext.Provider value={petSpeciesColours}>
+      <main>
+        <SiteHeader
+          mobileMenuOpen={mobileMenuOpen}
+          onToggleMenu={() => setMobileMenuOpen((open) => !open)}
+        />
+        <LandingPage
+          authMode={authMode}
+          data={data}
+          mobileMenuOpen={mobileMenuOpen}
+          onAuthModeChange={setAuthMode}
+          onLogin={startSession}
+          onSignup={(name, email, password) => {
+            const newUser: User = {
+              id: makeId('u'),
+              name,
+              email,
+              password,
+              role: 'customer',
+            }
+            setData((current) => ({
+              ...current,
+              users: [...current.users, newUser],
+            }))
+            startSession(newUser.id)
+          }}
+        />
+      </main>
+    </PetSpeciesColourContext.Provider>
   )
 }
 
@@ -1497,19 +2136,31 @@ function OwnerDashboard({
     'queue' | 'clients' | 'staff' | 'services' | 'theme' | 'chat'
   >('queue')
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
-  const ownerQueueBookings = data.bookings.filter((booking, index, bookings) => {
-    if (!booking.recurringBookingId || booking.status !== 'requested') {
-      return true
-    }
+  const ownerQueueBookings = data.bookings
+    .filter((booking) => {
+      const awaitingApproval = booking.status === 'requested'
+      const needsStaffAssignment =
+        !booking.walkerId && ['approved', 'in-progress'].includes(booking.status)
+      const needsCancellationDecision =
+        booking.status === 'cancelled' &&
+        booking.cancellationCharge === 'pending'
 
-    return (
-      bookings.findIndex(
-        (candidate) =>
-          candidate.recurringBookingId === booking.recurringBookingId &&
-          candidate.status === 'requested',
-      ) === index
-    )
-  })
+      return awaitingApproval || needsStaffAssignment || needsCancellationDecision
+    })
+    .filter((booking, index, bookings) => {
+      if (!booking.recurringBookingId || booking.status !== 'requested') {
+        return true
+      }
+
+      return (
+        bookings.findIndex(
+          (candidate) =>
+            candidate.recurringBookingId === booking.recurringBookingId &&
+            candidate.status === 'requested',
+        ) === index
+      )
+    })
+    .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
 
   function resolveCancellationCharge(booking: Booking, chargeable: boolean) {
     setData((current) => {
@@ -1573,7 +2224,17 @@ function OwnerDashboard({
             eyebrow="Owner console"
             title="Approve bookings and assign walkers."
           />
+          <BookingTimeline data={data} setData={setData} />
           <div className="booking-stack">
+            {ownerQueueBookings.length === 0 && (
+              <div className="empty-state">
+                <h3>No bookings need attention.</h3>
+                <p>
+                  Approved and assigned appointments stay visible on the
+                  timeline.
+                </p>
+              </div>
+            )}
             {ownerQueueBookings.map((booking) => {
               const service = data.services.find(
                 (candidate) => candidate.id === booking.serviceId,
@@ -1608,8 +2269,7 @@ function OwnerDashboard({
                       {formatMoney(booking.price)}
                     </p>
                     <p className="muted">
-                      {customer?.name} ·{' '}
-                      {selectedPets.map((pet) => pet.name).join(', ')}
+                      {customer?.name} · <PetInlineList pets={selectedPets} />
                     </p>
                     {isRecurringApproval && (
                       <p className="muted">
@@ -1725,6 +2385,533 @@ function OwnerDashboard({
         <MessagesPanel data={data} setData={setData} user={user} />
       )}
     </div>
+  )
+}
+
+function BookingTimeline({
+  data,
+  setData,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+}) {
+  const [startDate, setStartDate] = useState(formatDateInputValue())
+  const [dayCount, setDayCount] = useState(1)
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
+  const rangeDates = getDateRangeDates(startDate, dayCount)
+  const endDate = rangeDates[rangeDates.length - 1] ?? startDate
+  const walkers = data.users.filter((candidate) => candidate.role === 'walker')
+  const visibleBookings = data.bookings
+    .filter((booking) => booking.date >= startDate && booking.date <= endDate)
+    .sort(
+      (a, b) =>
+        a.date.localeCompare(b.date) ||
+        a.time.localeCompare(b.time) ||
+        a.id.localeCompare(b.id),
+    )
+  const hasUnassignedBookings = visibleBookings.some(
+    (booking) => !booking.walkerId,
+  )
+  const timelineStaff = hasUnassignedBookings
+    ? [
+        ...walkers,
+        {
+          id: 'unassigned',
+          name: 'Unassigned',
+          email: '',
+          password: '',
+          role: 'walker' as const,
+        },
+      ]
+    : walkers
+  const selectedBooking =
+    visibleBookings.find((booking) => booking.id === selectedBookingId) ?? null
+  const selectedBookingPets = selectedBooking
+    ? data.pets.filter((pet) => selectedBooking.petIds.includes(pet.id))
+    : []
+  const selectedPet =
+    selectedBookingPets.find((pet) => pet.id === selectedPetId) ?? null
+  const selectedCustomer = selectedPet
+    ? data.users.find((candidate) => candidate.id === selectedPet.ownerId)
+    : null
+  const timelineStartMinute = 6 * 60
+  const timelineEndMinute = 22 * 60
+  const timelineDayMinutes = timelineEndMinute - timelineStartMinute
+  const totalTimelineMinutes = timelineDayMinutes * dayCount
+  const minTimelineWidth = dayCount === 1 ? 1120 : Math.max(1120, dayCount * 420)
+  const timelineMinimumRowHeight = 142
+  const timelineLaneTop = 16
+  const timelineLaneHeight = 84
+  const timelineRowPadding = 18
+  const timeMarkers =
+    dayCount === 1
+      ? Array.from({ length: 17 }, (_, index) => timelineStartMinute + index * 60)
+      : []
+
+  useEffect(() => {
+    if (selectedBookingId && !selectedBooking) {
+      setSelectedBookingId(null)
+      setSelectedPetId(null)
+    }
+  }, [selectedBooking, selectedBookingId])
+
+  function moveRange(direction: -1 | 1) {
+    setStartDate((current) => addDaysInputValue(current, direction * dayCount))
+  }
+
+  function selectBooking(bookingId: string) {
+    setSelectedBookingId((current) => (current === bookingId ? null : bookingId))
+    setSelectedPetId(null)
+  }
+
+  function reassignSelectedBooking(walkerId: string) {
+    if (!selectedBooking) return
+
+    setData((current) => ({
+      ...current,
+      bookings: current.bookings.map((booking) =>
+        booking.id === selectedBooking.id
+          ? { ...booking, walkerId: walkerId || undefined }
+          : booking,
+      ),
+    }))
+  }
+
+  function cancelSelectedBooking() {
+    if (!selectedBooking) return
+
+    const pets = selectedBookingPets.map((pet) => pet.name).join(', ') || 'this pet'
+    const confirmed = window.confirm(
+      `Are you sure you want to cancel ${pets} on ${formatDate(
+        selectedBooking.date,
+      )} at ${formatBookingTime(selectedBooking)}?`,
+    )
+
+    if (!confirmed) return
+
+    setData((current) => ({
+      ...current,
+      bookings: current.bookings.map((booking) =>
+        booking.id === selectedBooking.id
+          ? {
+              ...booking,
+              status: 'cancelled',
+              cancelledAt: new Date().toISOString(),
+              cancellationCharge: 'waived',
+            }
+          : booking,
+      ),
+    }))
+  }
+
+  function removePetFromSelectedBooking(pet: Pet) {
+    if (!selectedBooking) return
+    if (selectedBooking.petIds.length <= 1) {
+      window.alert('An appointment must have at least one pet.')
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Remove ${pet.name} from this appointment on ${formatDate(
+        selectedBooking.date,
+      )} at ${formatBookingTime(selectedBooking)}?`,
+    )
+
+    if (!confirmed) return
+
+    const nextPetIds = selectedBooking.petIds.filter((petId) => petId !== pet.id)
+    const service = data.services.find(
+      (candidate) => candidate.id === selectedBooking.serviceId,
+    )
+    const nextPrice = service
+      ? calculateServicePrice(service, nextPetIds.length)
+      : selectedBooking.price
+
+    setData((current) => ({
+      ...current,
+      bookings: current.bookings.map((booking) =>
+        booking.id === selectedBooking.id
+          ? {
+              ...booking,
+              petIds: nextPetIds,
+              price: nextPrice,
+            }
+          : booking,
+      ),
+      transactions: current.transactions.map((transaction) =>
+        transaction.bookingId === selectedBooking.id &&
+        transaction.status === 'owed' &&
+        transaction.type !== 'payment'
+          ? {
+              ...transaction,
+              amount: nextPrice,
+              description: `${transaction.description} (updated after pet removal)`,
+            }
+          : transaction,
+      ),
+    }))
+
+    setSelectedPetId((current) =>
+      current === pet.id ? (nextPetIds[0] ?? null) : current,
+    )
+  }
+
+  function rowBookings(staffId: string) {
+    return visibleBookings.filter((booking) =>
+      staffId === 'unassigned'
+        ? !booking.walkerId
+        : booking.walkerId === staffId,
+    )
+  }
+
+  function getBookingTimelinePosition(booking: Booking) {
+    const service = data.services.find(
+      (candidate) => candidate.id === booking.serviceId,
+    )
+    const dateIndex = rangeDates.indexOf(booking.date)
+    const rawStartOffset =
+      dateIndex * timelineDayMinutes +
+      timeToMinutes(booking.time) -
+      timelineStartMinute
+    const startOffset = Math.min(
+      Math.max(0, totalTimelineMinutes - 30),
+      Math.max(0, rawStartOffset),
+    )
+    const duration = Math.max(30, getBookingDurationMinutes(booking, service))
+    const clippedDuration = Math.min(
+      duration,
+      totalTimelineMinutes - startOffset,
+    )
+
+    return {
+      endOffset: startOffset + clippedDuration,
+      service,
+      startOffset,
+      width: clippedDuration,
+    }
+  }
+
+  function buildTimelineRow(staff: User) {
+    const laneEnds: number[] = []
+    const placedBookings = rowBookings(staff.id).map((booking) => {
+      const position = getBookingTimelinePosition(booking)
+      const lane = laneEnds.findIndex((endOffset) => position.startOffset >= endOffset)
+      const laneIndex = lane === -1 ? laneEnds.length : lane
+      laneEnds[laneIndex] = position.endOffset
+
+      return {
+        booking,
+        customer: data.users.find(
+          (candidate) => candidate.id === booking.customerId,
+        ),
+        lane: laneIndex,
+        pets: data.pets.filter((pet) => booking.petIds.includes(pet.id)),
+        service: position.service,
+        position,
+      }
+    })
+    const laneCount = Math.max(1, laneEnds.length)
+    const rowHeight = Math.max(
+      timelineMinimumRowHeight,
+      timelineLaneTop + laneCount * timelineLaneHeight + timelineRowPadding,
+    )
+
+    return {
+      bookings: placedBookings,
+      rowHeight,
+      staff,
+    }
+  }
+
+  function bookingTimelineStyle(
+    placedBooking: ReturnType<typeof buildTimelineRow>['bookings'][number],
+  ): CSSProperties {
+    return {
+      left: `${(placedBooking.position.startOffset / totalTimelineMinutes) * 100}%`,
+      top: `${timelineLaneTop + placedBooking.lane * timelineLaneHeight}px`,
+      width: `${(placedBooking.position.width / totalTimelineMinutes) * 100}%`,
+    }
+  }
+
+  const timelineRows = timelineStaff.map((staff) => buildTimelineRow(staff))
+
+  return (
+    <section className="timeline-panel" aria-label="Bookings timeline">
+      <div className="timeline-toolbar">
+        <div>
+          <p className="eyebrow">Timeline</p>
+          <h3>{formatTimelineRangeLabel(startDate, dayCount)}</h3>
+          <p className="muted">
+            {visibleBookings.length} booking
+            {visibleBookings.length === 1 ? '' : 's'} across {dayCount} day
+            {dayCount === 1 ? '' : 's'}
+          </p>
+        </div>
+        <div className="timeline-controls">
+          <button
+            aria-label="Previous date range"
+            className="icon-button"
+            type="button"
+            onClick={() => moveRange(-1)}
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <label>
+            Date
+            <input
+              type="date"
+              value={startDate}
+              onChange={(event) =>
+                setStartDate(event.target.value || formatDateInputValue())
+              }
+            />
+          </label>
+          <button
+            aria-label="Next date range"
+            className="icon-button"
+            type="button"
+            onClick={() => moveRange(1)}
+          >
+            <ChevronRight size={18} />
+          </button>
+          <button
+            className="button ghost"
+            type="button"
+            disabled={dayCount === 1}
+            onClick={() => setDayCount((current) => Math.max(1, current - 1))}
+          >
+            <Plus size={16} />
+            Zoom in
+          </button>
+          <button
+            className="button ghost"
+            type="button"
+            disabled={dayCount === 7}
+            onClick={() => setDayCount((current) => Math.min(7, current + 1))}
+          >
+            <Minus size={16} />
+            Zoom out
+          </button>
+        </div>
+      </div>
+
+      <div className="timeline-frame">
+        <div className="timeline-staff-heading">Staff</div>
+        <div className="timeline-scroll">
+          <div
+            className={`timeline-track ${dayCount === 1 ? 'day-view' : 'range-view'}`}
+            style={{ minWidth: minTimelineWidth }}
+          >
+            <div
+              className={`timeline-scale ${dayCount === 1 ? 'time-scale' : ''}`}
+            >
+              {dayCount === 1
+                ? timeMarkers.map((minute) => (
+                    <span
+                      key={minute}
+                      style={{
+                        left: `${
+                          ((minute - timelineStartMinute) /
+                            totalTimelineMinutes) *
+                          100
+                        }%`,
+                      }}
+                    >
+                      {minutesToTimeLabel(minute)}
+                    </span>
+                  ))
+                : rangeDates.map((dateValue, index) => (
+                    <span
+                      key={dateValue}
+                      className="day-marker"
+                      style={{
+                        left: `${(index / dayCount) * 100}%`,
+                        width: `${100 / dayCount}%`,
+                      }}
+                    >
+                      {formatDate(dateValue)}
+                    </span>
+                  ))}
+            </div>
+            {timelineRows.map((row) => (
+              <div
+                className="timeline-row-track"
+                key={row.staff.id}
+                style={{
+                  height: row.rowHeight,
+                  minHeight: row.rowHeight,
+                }}
+              >
+                {rangeDates.map((dateValue, index) => (
+                  <span
+                    aria-hidden="true"
+                    className="timeline-day-band"
+                    key={dateValue}
+                    style={{
+                      left: `${(index / dayCount) * 100}%`,
+                      width: `${100 / dayCount}%`,
+                    }}
+                  />
+                ))}
+                {row.bookings.map((placedBooking) => {
+                  return (
+                    <button
+                      aria-pressed={selectedBookingId === placedBooking.booking.id}
+                      className={`timeline-booking status-${placedBooking.booking.status}`}
+                      key={placedBooking.booking.id}
+                      style={bookingTimelineStyle(placedBooking)}
+                      type="button"
+                      onClick={() => selectBooking(placedBooking.booking.id)}
+                    >
+                      <span>{formatBookingTime(placedBooking.booking)}</span>
+                      <strong>
+                        <PetInlineList pets={placedBooking.pets} />
+                      </strong>
+                      <small>
+                        {statusLabel(placedBooking.booking.status)} ·{' '}
+                        {placedBooking.service?.name ?? 'Service'} ·{' '}
+                        {placedBooking.customer?.name}
+                      </small>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="timeline-staff-list">
+          {timelineRows.map((row) => {
+            const staffBookingCount = row.bookings.length
+
+            return (
+              <div
+                className="timeline-staff"
+                key={row.staff.id}
+                style={{
+                  height: row.rowHeight,
+                  minHeight: row.rowHeight,
+                }}
+              >
+                {row.staff.id === 'unassigned' ? (
+                  <span className="staff-avatar mini">?</span>
+                ) : (
+                  <StaffAvatar user={row.staff} />
+                )}
+                <div>
+                  <strong>{row.staff.name}</strong>
+                  <span>
+                    {staffBookingCount} booking
+                    {staffBookingCount === 1 ? '' : 's'}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {selectedBooking && (
+        <div className="timeline-detail">
+          <div>
+            <span className={`status-badge ${selectedBooking.status}`}>
+              {statusLabel(selectedBooking.status)}
+            </span>
+            <h3>
+              {data.services.find(
+                (service) => service.id === selectedBooking.serviceId,
+              )?.name ?? 'Booking'}
+            </h3>
+            <p>
+              {formatDate(selectedBooking.date)} at{' '}
+              {formatBookingTime(selectedBooking)} ·{' '}
+              {formatMoney(selectedBooking.price)}
+            </p>
+            {selectedBooking.notes && <p>{selectedBooking.notes}</p>}
+          </div>
+          <div className="timeline-detail-controls">
+            <label>
+              Staff assignment
+              <select
+                value={selectedBooking.walkerId ?? ''}
+                disabled={['cancelled', 'declined', 'completed'].includes(
+                  selectedBooking.status,
+                )}
+                onChange={(event) => reassignSelectedBooking(event.target.value)}
+              >
+                <option value="">Unassigned</option>
+                {walkers.map((walker) => (
+                  <option key={walker.id} value={walker.id}>
+                    {walker.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="button danger"
+              type="button"
+              disabled={['cancelled', 'declined', 'completed'].includes(
+                selectedBooking.status,
+              )}
+              onClick={cancelSelectedBooking}
+            >
+              <X size={16} />
+              Cancel appointment
+            </button>
+          </div>
+          <div>
+            <h4>Pets</h4>
+            <div className="pet-detail-actions">
+              {selectedBookingPets.map((pet) => (
+                <div
+                  className={
+                    selectedPetId === pet.id
+                      ? 'pet-detail-action is-selected'
+                      : 'pet-detail-action'
+                  }
+                  key={pet.id}
+                >
+                  <button
+                    aria-label={`View ${pet.name} details`}
+                    type="button"
+                    onClick={() => setSelectedPetId(pet.id)}
+                  >
+                    <PetSpeciesIcon species={pet.species} size={15} />
+                    {pet.name}
+                  </button>
+                  <button
+                    aria-label={`Remove ${pet.name} from appointment`}
+                    className="pet-remove-button"
+                    type="button"
+                    disabled={['cancelled', 'declined', 'completed'].includes(
+                      selectedBooking.status,
+                    )}
+                    onClick={() => removePetFromSelectedBooking(pet)}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          {selectedPet && (
+            <div className="pet-address-notes">
+              <h4>{selectedPet.name}</h4>
+              <p>
+                {selectedPet.species} · {selectedPet.breed} · {selectedPet.age}
+              </p>
+              <p>
+                <strong>Address:</strong>{' '}
+                {selectedCustomer?.address ?? 'No address on file'}
+              </p>
+              <p>
+                <strong>Notes:</strong> {selectedPet.notes || 'No notes on file'}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -1896,7 +3083,7 @@ function WalkerDashboard({
                     <div className="pet-mini-list">
                       {pets.map((pet) => (
                         <span key={pet.id}>
-                          <PawPrint size={14} />
+                          <PetSpeciesIcon species={pet.species} />
                           {pet.name}
                         </span>
                       ))}
@@ -1997,7 +3184,7 @@ function WalkerDashboard({
                           {customer?.name}
                         </p>
                         <p className="muted">
-                          Pets: {pets.map((pet) => pet.name).join(', ')}
+                          Pets: <PetInlineList pets={pets} />
                         </p>
                       </div>
                       <div className="row-actions">
@@ -2639,7 +3826,7 @@ function ClientBookingPanel({
               <div className="pet-mini-list">
                 {clientPets.map((pet) => (
                   <span key={pet.id}>
-                    <PawPrint size={14} />
+                    <PetSpeciesIcon species={pet.species} />
                     {pet.name}
                   </span>
                 ))}
@@ -3423,7 +4610,7 @@ function StaffAdminPanel({
                         {customer?.name}
                       </p>
                       <p className="muted">
-                        Pets: {pets.map((pet) => pet.name).join(', ') || 'None'}
+                        Pets: <PetInlineList pets={pets} />
                       </p>
                     </div>
                     <div className="row-actions">
@@ -4043,11 +5230,14 @@ function PetsPanel({
               {pet.photo ? (
                 <img src={pet.photo} alt={pet.name} />
               ) : (
-                <PawPrint size={32} />
+                <PetSpeciesIcon species={pet.species} size={32} />
               )}
             </div>
             <div>
-              <h3>{pet.name}</h3>
+              <h3 className="pet-card-title">
+                <PetSpeciesIcon species={pet.species} size={18} />
+                {pet.name}
+              </h3>
               <p>
                 {pet.species} · {pet.breed || 'Breed not set'} · Age{' '}
                 {pet.age || 'not set'}
@@ -4318,6 +5508,7 @@ function BookingRequestPanel({
                   setDraft({ ...draft, petIds })
                 }}
               />
+              <PetSpeciesIcon species={pet.species} />
               {pet.name}
             </label>
           ))}
@@ -4646,6 +5837,32 @@ function ThemePanel({
   setData: Dispatch<SetStateAction<AppData>>
 }) {
   const selectedTheme = getTheme(data.themeId)
+  const petSpeciesColours = getPetSpeciesColourEntries(data)
+
+  function updatePetSpeciesColour(speciesKey: string, colour: string) {
+    if (!isHexColour(colour)) return
+
+    setData((current) => ({
+      ...current,
+      petSpeciesColours: {
+        ...mergePetSpeciesColours(current.petSpeciesColours),
+        [speciesKey]: colour.toLowerCase(),
+      },
+    }))
+  }
+
+  function resetPetSpeciesColour(speciesKey: string) {
+    const defaultColour =
+      defaultPetSpeciesColours[speciesKey] ?? defaultPetSpeciesColours.pet
+
+    setData((current) => ({
+      ...current,
+      petSpeciesColours: {
+        ...mergePetSpeciesColours(current.petSpeciesColours),
+        [speciesKey]: defaultColour,
+      },
+    }))
+  }
 
   return (
     <section className="workspace">
@@ -4715,6 +5932,40 @@ function ThemePanel({
           )
         })}
       </div>
+      <section className="pet-colour-settings">
+        <div className="section-heading compact">
+          <p className="eyebrow">Owner/admin defaults</p>
+          <h3>Pet type colours</h3>
+        </div>
+        <div className="pet-colour-grid">
+          {petSpeciesColours.map(({ colour, key, label }) => (
+            <div className="pet-colour-control" key={key}>
+              <label>
+                <span>
+                  <PetSpeciesIcon species={key} colour={colour} size={18} />
+                  {label} colour
+                </span>
+                <input
+                  aria-label={`${label} colour`}
+                  type="color"
+                  value={colour}
+                  onChange={(event) =>
+                    updatePetSpeciesColour(key, event.target.value)
+                  }
+                />
+              </label>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label={`Reset ${label} colour`}
+                onClick={() => resetPetSpeciesColour(key)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
     </section>
   )
 }
@@ -5316,7 +6567,7 @@ function BookingList({
                 {formatMoney(booking.price)}
               </p>
               <p className="muted">
-                Pets: {pets.map((pet) => pet.name).join(', ') || 'None'} ·
+                Pets: <PetInlineList pets={pets} /> ·
                 Walker: {walker?.name ?? 'Awaiting assignment'}
               </p>
               {(booking.pickedUpAt || booking.returnedAt) && (

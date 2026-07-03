@@ -151,11 +151,11 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   )
   await page.getByRole('button', { name: 'Bookings' }).click()
   await expect(
-    page.locator('article').filter({ hasText: 'Nina Verbal' }),
-  ).toContainText('Scout')
+    page.locator('.timeline-panel').getByRole('button', { name: /Scout/i }),
+  ).toBeVisible()
   await expect(
     page.locator('article').filter({ hasText: 'Nina Verbal' }),
-  ).toContainText('£22.00')
+  ).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Staff' }).click()
   await page.getByLabel('Name').fill('Jordan Staff')
@@ -301,6 +301,11 @@ test('owner services layout keeps slots readable on laptop screens', async ({
   await loginWithEmail(page, 'owner@waggulous.local')
   await page.getByRole('button', { name: 'Services' }).click()
 
+  const dashboardWidth = await page.locator('.dashboard-grid').evaluate((grid) => {
+    return Math.round(grid.getBoundingClientRect().width)
+  })
+  expect(dashboardWidth).toBeGreaterThanOrEqual(1360)
+
   const walkServiceRow = page
     .locator('.service-admin-row')
     .filter({ hasText: '30 minute walk' })
@@ -334,6 +339,280 @@ test('owner services layout keeps slots readable on laptop screens', async ({
   expect(layout.slotsWidth).toBeGreaterThan(480)
   expect(layout.firstSlotWidth).toBeGreaterThan(180)
   expect(layout.controlsBelowSlots).toBe(true)
+})
+
+test('owner controls site-wide pet type colours', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await loginWithEmail(page, 'owner@waggulous.local')
+
+  await page.getByRole('button', { name: 'Theme' }).click()
+  await page.locator('input[aria-label="Dog colour"]').fill('#0055aa')
+
+  const savedColour = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.petSpeciesColours?.dog
+  })
+  expect(savedColour).toBe('#0055aa')
+
+  await page.getByRole('button', { name: 'Bookings' }).click()
+  const timelineDogColour = await page
+    .locator('.timeline-booking')
+    .filter({ hasText: 'Mabel' })
+    .locator('.pet-name-chip')
+    .first()
+    .evaluate((chip) =>
+      getComputedStyle(chip).getPropertyValue('--pet-species-colour').trim(),
+    )
+  expect(timelineDogColour).toBe('#0055aa')
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await expect(page.getByRole('button', { name: 'Theme' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Pets' }).click()
+
+  const customerPetColour = await page
+    .locator('.pet-card')
+    .filter({ hasText: 'Mabel' })
+    .locator('.pet-species-icon')
+    .first()
+    .evaluate((icon) =>
+      getComputedStyle(icon).getPropertyValue('--pet-species-colour').trim(),
+    )
+  expect(customerPetColour).toBe('#0055aa')
+})
+
+test('owner bookings open in an interactive staff timeline', async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  const todayDate = dateInputFromToday(0)
+
+  await page.evaluate((date) => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    const overlapBookings = [
+      ['b-overlap-rufus', 'u-eliza', 'p-rufus', 'Rufus'],
+      ['b-overlap-nori', 'u-omar', 'p-nori', 'Nori'],
+      ['b-overlap-luna', 'u-grace', 'p-luna', 'Luna'],
+    ].map(([id, customerId, petId, petName]) => ({
+      id,
+      customerId,
+      petIds: [petId],
+      serviceId: 's-walk-30',
+      slotId: 'slot-walk-early',
+      date,
+      time: '07:00',
+      endTime: '08:00',
+      notes: `Demo overlapping early walk for ${petName}.`,
+      status: 'approved',
+      price: 14,
+      walkerId: 'u-maya',
+    }))
+
+    localStorage.setItem(
+      'waggulous-mvp-data',
+      JSON.stringify({
+        ...data,
+        bookings: [
+          ...overlapBookings,
+          ...data.bookings.filter(
+            (booking: { id: string }) => !booking.id.startsWith('b-overlap-'),
+          ),
+        ],
+      }),
+    )
+  }, todayDate)
+  await page.reload()
+  await loginWithEmail(page, 'owner@waggulous.local')
+
+  const timeline = page.locator('.timeline-panel')
+  await expect(timeline).toContainText('5 bookings across 1 day')
+  await expect(timeline.getByText('Alex Walker')).toBeVisible()
+  await expect(timeline.getByText('Maya Chen')).toBeVisible()
+  await expect(timeline.getByText('Priya Shah')).toBeVisible()
+  await expect(timeline.getByText('Tom Evans')).toBeVisible()
+  await expect(timeline.getByRole('button', { name: /Mabel/i })).toBeVisible()
+  await expect(timeline.getByRole('button', { name: /Pip/i })).toBeVisible()
+  await expect(timeline.getByRole('button', { name: /Rufus/i })).toBeVisible()
+  await expect(timeline.getByRole('button', { name: /Nori/i })).toBeVisible()
+  await expect(timeline.getByRole('button', { name: /Luna/i })).toBeVisible()
+  const dayLayout = await timeline.evaluate((panel) => {
+    const rect = (element: Element) => element.getBoundingClientRect()
+    const tracks = Array.from(panel.querySelectorAll('.timeline-row-track'))
+    const staff = Array.from(panel.querySelectorAll('.timeline-staff'))
+    const cards = Array.from(panel.querySelectorAll('.timeline-booking'))
+    const mayaIndex = staff.findIndex((row) =>
+      row.textContent?.includes('Maya Chen'),
+    )
+    const mayaCards =
+      mayaIndex >= 0
+        ? Array.from(
+            tracks[mayaIndex].querySelectorAll('.timeline-booking'),
+          ).filter((card) =>
+            ['Rufus', 'Nori', 'Luna'].some((petName) =>
+              card.textContent?.includes(petName),
+            ),
+          )
+        : []
+
+    return {
+      maxCardOverflow: Math.max(
+        0,
+        ...cards.map(
+          (card) =>
+            rect(card).bottom - rect(card.parentElement as Element).bottom,
+        ),
+      ),
+      maxRowDelta: Math.max(
+        0,
+        ...tracks.map((track, index) =>
+          staff[index]
+            ? Math.abs(rect(track).top - rect(staff[index]).top)
+            : 0,
+        ),
+      ),
+      mayaOverlapCardCount: mayaCards.length,
+      mayaOverlapLaneCount: new Set(
+        mayaCards.map((card) => Math.round(rect(card).top)),
+      ).size,
+    }
+  })
+  expect(dayLayout.maxCardOverflow).toBeLessThanOrEqual(1)
+  expect(dayLayout.maxRowDelta).toBeLessThanOrEqual(1)
+  expect(dayLayout.mayaOverlapCardCount).toBe(3)
+  expect(dayLayout.mayaOverlapLaneCount).toBe(3)
+
+  await timeline.getByRole('button', { name: /zoom out/i }).click()
+  await expect(timeline).toContainText('8 bookings across 2 days')
+  const zoomedLayout = await timeline.evaluate((panel) => {
+    const rect = (element: Element) => element.getBoundingClientRect()
+    const scale = panel.querySelector('.timeline-scale')
+    const markers = Array.from(panel.querySelectorAll('.timeline-scale .day-marker'))
+    const cards = Array.from(panel.querySelectorAll('.timeline-booking'))
+    const tracks = Array.from(panel.querySelectorAll('.timeline-row-track'))
+    const staff = Array.from(panel.querySelectorAll('.timeline-staff'))
+    const scaleRect = scale ? rect(scale) : null
+
+    return {
+      maxCardOverflow: Math.max(
+        0,
+        ...cards.map(
+          (card) =>
+            rect(card).bottom - rect(card.parentElement as Element).bottom,
+        ),
+      ),
+      maxHeaderOverflow: scaleRect
+        ? Math.max(
+            0,
+            ...markers.map((marker) =>
+              Math.max(
+                scaleRect.top - rect(marker).top,
+                rect(marker).bottom - scaleRect.bottom,
+              ),
+            ),
+          )
+        : 999,
+      maxRowDelta: Math.max(
+        0,
+        ...tracks.map((track, index) =>
+          staff[index]
+            ? Math.abs(rect(track).top - rect(staff[index]).top)
+            : 0,
+        ),
+      ),
+    }
+  })
+  expect(zoomedLayout.maxCardOverflow).toBeLessThanOrEqual(1)
+  expect(zoomedLayout.maxHeaderOverflow).toBeLessThanOrEqual(1)
+  expect(zoomedLayout.maxRowDelta).toBeLessThanOrEqual(1)
+  await timeline.getByRole('button', { name: /next date range/i }).click()
+  await expect(timeline).toContainText('5 bookings across 2 days')
+  await timeline.getByRole('button', { name: /previous date range/i }).click()
+
+  const multiPetAppointment = timeline
+    .locator('.timeline-booking')
+    .filter({ hasText: 'Nori' })
+    .filter({ hasText: 'Biscuit' })
+    .filter({ hasText: 'Pet sitting pop-in' })
+  await multiPetAppointment.click()
+  await expect(timeline).toContainText(
+    'Quiet visit for Nori, then check Biscuit has hay and water.',
+  )
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Remove Biscuit')
+    await dialog.accept()
+  })
+  await timeline
+    .getByRole('button', { name: 'Remove Biscuit from appointment' })
+    .click()
+  const updatedMultiPetAppointment = timeline
+    .locator('.timeline-booking')
+    .filter({ hasText: 'Nori' })
+    .filter({ hasText: 'Pet sitting pop-in' })
+  await expect(updatedMultiPetAppointment).toContainText('Nori')
+  await expect(updatedMultiPetAppointment).not.toContainText('Biscuit')
+  const removedPetBooking = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    const booking = data.bookings.find(
+      (candidate: { id: string }) => candidate.id === 'b-demo-3',
+    )
+
+    return booking?.petIds ?? []
+  })
+  expect(removedPetBooking).toEqual(['p-nori'])
+
+  await timeline.getByRole('button', { name: /Mabel/i }).click()
+  await expect(timeline).toContainText('Please use the blue harness.')
+  await timeline
+    .locator('.pet-detail-actions')
+    .getByRole('button', { name: 'View Mabel details' })
+    .click()
+  await expect(timeline).toContainText('12 River Walk, Bristol')
+  await expect(timeline).toContainText(
+    'Loves woodland routes, nervous around scooters.',
+  )
+  await expect(timeline.getByRole('img', { name: 'Dog' }).first()).toBeVisible()
+  await expect(timeline.getByRole('img', { name: 'Cat' }).first()).toBeVisible()
+  await timeline
+    .getByRole('combobox', { name: 'Staff assignment' })
+    .selectOption('u-priya')
+  await expect(
+    timeline.getByRole('combobox', { name: 'Staff assignment' }),
+  ).toHaveValue('u-priya')
+  const reassignedStaff = await timeline.evaluate((panel) => {
+    const tracks = Array.from(panel.querySelectorAll('.timeline-row-track'))
+    const staff = Array.from(panel.querySelectorAll('.timeline-staff'))
+    const index = tracks.findIndex((track) =>
+      track.textContent?.includes('Mabel'),
+    )
+
+    return index >= 0 ? staff[index]?.textContent ?? '' : ''
+  })
+  expect(reassignedStaff).toContain('Priya Shah')
+  await timeline
+    .getByRole('combobox', { name: 'Staff assignment' })
+    .selectOption('u-walker')
+  await expect(
+    timeline.getByRole('combobox', { name: 'Staff assignment' }),
+  ).toHaveValue('u-walker')
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('cancel Mabel')
+    await dialog.dismiss()
+  })
+  await timeline.getByRole('button', { name: /cancel appointment/i }).click()
+  await expect(timeline.locator('.timeline-detail .status-badge')).toHaveText(
+    'approved',
+  )
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('cancel Mabel')
+    await dialog.accept()
+  })
+  await timeline.getByRole('button', { name: /cancel appointment/i }).click()
+  await expect(timeline.locator('.timeline-detail .status-badge')).toHaveText(
+    'cancelled',
+  )
+  await expect(
+    timeline.locator('.timeline-booking').filter({ hasText: 'Mabel' }),
+  ).toContainText('cancelled')
 })
 
 test('recurring slot bookings can be halted and individual slots cancelled', async ({
@@ -480,6 +759,11 @@ test('money matures completed services and allows client credit', async ({
   await loginWithEmail(page, 'owner@waggulous.local')
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByRole('button', { name: 'Payments' }).click()
+  await page
+    .locator('form')
+    .filter({ hasText: 'Payment received' })
+    .getByLabel('Client')
+    .selectOption('u-customer')
   await expect(page.getByText(/Client balance:/)).toContainText(
     '£42.00 outstanding',
   )
@@ -657,16 +941,25 @@ test('multi-household booking and walker exception workflows stay coherent', asy
   expect(seededCounts).toEqual({ households: 12, requested: 12 })
 
   await loginWithEmail(page, 'owner@waggulous.local')
-  for (const petName of ['Bracken', 'Milo', 'Luna', 'Rafi', 'Otis']) {
-    const row = page.locator('article').filter({ hasText: petName })
+  for (const [petName, clientName] of [
+    ['Bracken', 'Ava Green'],
+    ['Milo', 'Ben Clarke'],
+    ['Luna', 'Cora Patel'],
+    ['Rafi', 'Dylan Scott'],
+    ['Otis', 'Eden Walsh'],
+  ]) {
+    const row = page
+      .locator('article')
+      .filter({ hasText: petName })
+      .filter({ hasText: clientName })
     await row.getByRole('combobox').selectOption('u-walker')
     await row.getByRole('button', { name: /^Approve$/ }).click()
-    await expect(row).toContainText('approved')
+    await expect(row).toHaveCount(0)
   }
 
   const declinedRow = page.locator('article').filter({ hasText: 'Poppy' })
   await declinedRow.getByRole('button', { name: /^Decline$/ }).click()
-  await expect(declinedRow).toContainText('declined')
+  await expect(declinedRow).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByRole('button', { name: 'Appointment' }).click()
@@ -708,8 +1001,14 @@ test('multi-household booking and walker exception workflows stay coherent', asy
     .filter({ hasText: 'Alex Walker' })
     .getByRole('button', { name: /view profile and appointments/i })
     .click()
-  for (const petName of ['Luna', 'Rafi']) {
-    const staffRow = page.locator('article').filter({ hasText: petName })
+  for (const [petName, clientName] of [
+    ['Luna', 'Cora Patel'],
+    ['Rafi', 'Dylan Scott'],
+  ]) {
+    const staffRow = page
+      .locator('article')
+      .filter({ hasText: petName })
+      .filter({ hasText: clientName })
     await staffRow.getByLabel('Reassign').selectOption('u-relief')
     await expect(staffRow).toHaveCount(0)
   }
