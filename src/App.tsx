@@ -3597,6 +3597,28 @@ function ClientBookingPanel({
     setSuccessMessage('Staff payment confirmed into the company account.')
   }
 
+  function removeStaffPayment(payment: Transaction) {
+    const method = payment.method ?? 'other'
+    if (
+      !window.confirm(
+        `Remove pending ${method} payment of ${formatMoney(
+          payment.amount,
+        )}? Use this only if the staff member added it in error.`,
+      )
+    ) {
+      return
+    }
+
+    setData((current) => ({
+      ...current,
+      transactions: current.transactions.filter(
+        (transaction) => transaction.id !== payment.id,
+      ),
+    }))
+    setError('')
+    setSuccessMessage('Staff payment removed.')
+  }
+
   return (
     <section className="workspace">
       <WorkspaceTitle
@@ -4125,14 +4147,24 @@ function ClientBookingPanel({
                           : ''}
                         {recorder ? ` · recorded by ${recorder.name}` : ''}
                       </span>
-                      <button
-                        className="button primary"
-                        type="button"
-                        onClick={() => confirmStaffPayment(payment.id)}
-                      >
-                        <Check size={16} />
-                        Confirm into company account
-                      </button>
+                      <div className="row-actions">
+                        <button
+                          className="button primary"
+                          type="button"
+                          onClick={() => confirmStaffPayment(payment.id)}
+                        >
+                          <Check size={16} />
+                          Confirm into company account
+                        </button>
+                        <button
+                          className="button danger"
+                          type="button"
+                          onClick={() => removeStaffPayment(payment)}
+                        >
+                          <X size={16} />
+                          Remove payment
+                        </button>
+                      </div>
                     </div>
                   )
                 })}

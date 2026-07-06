@@ -772,6 +772,54 @@ test('admin confirms cash received by staff into the company account', async ({
   ])
 })
 
+test('admin can remove a staff-entered payment added in error', async ({
+  page,
+}) => {
+  await loginWithEmail(page, 'walker@waggulous.local')
+
+  const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
+  await mabelJob.getByRole('button', { name: /picked up/i }).click()
+  await mabelJob.getByRole('button', { name: /returned/i }).click()
+  await mabelJob.getByLabel('Payment received').fill('14')
+  await mabelJob.getByLabel('Method').selectOption('cash')
+  await mabelJob.getByRole('button', { name: /mark received/i }).click()
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'admin@waggulous.com')
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByRole('button', { name: 'Payments' }).click()
+
+  const pendingPayment = page
+    .locator('.pending-payment-row')
+    .filter({ hasText: 'Pending cash payment' })
+    .filter({ hasText: 'Sam Taylor' })
+  await expect(pendingPayment).toBeVisible()
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Remove pending cash payment of £14.00')
+    await dialog.dismiss()
+  })
+  await pendingPayment.getByRole('button', { name: /remove payment/i }).click()
+  await expect(pendingPayment).toBeVisible()
+
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('added it in error')
+    await dialog.accept()
+  })
+  await pendingPayment.getByRole('button', { name: /remove payment/i }).click()
+  await expect(page.getByRole('status')).toContainText('Staff payment removed.')
+  await expect(pendingPayment).toHaveCount(0)
+
+  const remainingPayments = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.transactions.filter(
+      (transaction: { bookingId?: string; type?: string }) =>
+        transaction.bookingId === 'b-1' && transaction.type === 'payment',
+    ).length
+  })
+  expect(remainingPayments).toBe(0)
+})
+
 test('mobile MVP journey covers customer, admin, and walker workspaces', async ({
   page,
 }) => {
