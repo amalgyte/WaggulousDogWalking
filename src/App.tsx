@@ -518,6 +518,33 @@ function makeId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`
 }
 
+function randomCharacterFrom(characters: string) {
+  const values = new Uint32Array(1)
+  crypto.getRandomValues(values)
+  return characters[values[0] % characters.length]
+}
+
+function generateStaffResetPassword(currentPassword = '') {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+  const numbers = '0123456789'
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const password = `${randomCharacterFrom(letters)}${randomCharacterFrom(
+      letters,
+    )}${randomCharacterFrom(numbers)}${randomCharacterFrom(
+      numbers,
+    )}${randomCharacterFrom(numbers)}${randomCharacterFrom(numbers)}`
+
+    if (password !== currentPassword) return password
+  }
+
+  return `${randomCharacterFrom(letters)}${randomCharacterFrom(
+    letters,
+  )}${randomCharacterFrom(numbers)}${randomCharacterFrom(
+    numbers,
+  )}${randomCharacterFrom(numbers)}${randomCharacterFrom(numbers)}`
+}
+
 function formatMoney(value: number) {
   return new Intl.NumberFormat('en-GB', {
     style: 'currency',
@@ -4105,6 +4132,7 @@ function StaffAdminPanel({
 }) {
   const staff = data.users.filter((candidate) => candidate.role === 'walker')
   const [error, setError] = useState('')
+  const [resetMessage, setResetMessage] = useState('')
   const [selectedStaffId, setSelectedStaffId] = useState(staff[0]?.id ?? '')
   const [draft, setDraft] = useState({
     name: '',
@@ -4126,6 +4154,7 @@ function StaffAdminPanel({
   function addStaff(event: FormEvent) {
     event.preventDefault()
     setError('')
+    setResetMessage('')
 
     if (!draft.name.trim() || !draft.email.trim() || !draft.password.trim()) {
       setError('Name, email, and password are required.')
@@ -4183,6 +4212,27 @@ function StaffAdminPanel({
       }))
     }
     reader.readAsDataURL(file)
+  }
+
+  function resetStaffPassword(member: User) {
+    const nextPassword = generateStaffResetPassword(member.password)
+
+    setData((current) => ({
+      ...current,
+      users: current.users.map((candidate) =>
+        candidate.id === member.id
+          ? {
+              ...candidate,
+              password: nextPassword,
+            }
+          : candidate,
+      ),
+    }))
+    setSelectedStaffId(member.id)
+    setError('')
+    setResetMessage(
+      `${member.name}'s password has been reset to ${nextPassword}. Share it with them securely.`,
+    )
   }
 
   function reassignAppointment(bookingId: string, walkerId: string) {
@@ -4271,6 +4321,11 @@ function StaffAdminPanel({
           Can claim unassigned appointments
         </label>
         {error && <p className="form-error wide">{error}</p>}
+        {resetMessage && (
+          <p className="form-success wide" role="status">
+            {resetMessage}
+          </p>
+        )}
         <button className="button primary" type="submit">
           <Plus size={16} />
           Add staff
@@ -4325,6 +4380,13 @@ function StaffAdminPanel({
                 >
                   View profile and appointments
                 </button>
+                <button
+                  className="button ghost staff-toggle"
+                  type="button"
+                  onClick={() => resetStaffPassword(member)}
+                >
+                  Reset password
+                </button>
               </div>
             </article>
           )
@@ -4351,6 +4413,13 @@ function StaffAdminPanel({
                     ? 'Can claim unassigned appointments'
                     : 'Cannot claim unassigned appointments'}
                 </p>
+                <button
+                  className="button ghost staff-toggle"
+                  type="button"
+                  onClick={() => resetStaffPassword(selectedStaff)}
+                >
+                  Reset password
+                </button>
               </div>
             </article>
             <article className="profile-summary">

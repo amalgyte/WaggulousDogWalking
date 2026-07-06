@@ -637,6 +637,46 @@ test('fresh store starts with admin only and allows password changes', async ({
   ).toBeVisible()
 })
 
+test('owner can reset a staff password with a generated handover code', async ({
+  page,
+}) => {
+  await loginWithEmail(page, 'admin@waggulous.com')
+  await page.getByRole('button', { name: 'Staff' }).click()
+
+  const staffRow = page
+    .locator('.staff-list')
+    .locator('article')
+    .filter({ hasText: 'walker@waggulous.local' })
+  await staffRow.getByRole('button', { name: 'Reset password' }).click()
+
+  const status = page.getByRole('status')
+  await expect(status).toContainText(
+    "Alex Walker's password has been reset to",
+  )
+  const statusText = (await status.textContent()) ?? ''
+  const generatedPassword = statusText.match(/reset to ([A-Z]{2}\d{4})\./)?.[1]
+  expect(generatedPassword).toBeTruthy()
+
+  const storedPassword = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.users.find(
+      (user: { email: string }) => user.email === 'walker@waggulous.local',
+    )?.password
+  })
+  expect(storedPassword).toBe(generatedPassword)
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'walker@waggulous.local', 'Test123!')
+  await expect(
+    page.getByText('Those details do not match a Waggulous account.'),
+  ).toBeVisible()
+
+  await loginWithEmail(page, 'walker@waggulous.local', generatedPassword)
+  await expect(
+    page.getByRole('heading', { name: /log pickup and return/i }),
+  ).toBeVisible()
+})
+
 test('mobile MVP journey covers customer, admin, and walker workspaces', async ({
   page,
 }) => {
