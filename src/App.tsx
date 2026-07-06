@@ -2750,6 +2750,9 @@ function WalkerDashboard({
   const [tab, setTab] = useState<
     'jobs' | 'clients' | 'profile' | 'holidays' | 'chat' | 'account'
   >('jobs')
+  const [selectedJobDate, setSelectedJobDate] = useState(() =>
+    formatDateInputValue(),
+  )
   const today = formatDateInputValue()
   const claimWindowEnd = addDaysInputValue(today, 7)
   const navItems: [typeof tab, string][] = user.canSelfAssign
@@ -2790,6 +2793,15 @@ function WalkerDashboard({
         `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)
       )
     })
+  const selectedDateBookings = assignedBookings.filter(
+    (booking) => booking.date === selectedJobDate,
+  )
+  const selectedDateActiveBookings = selectedDateBookings.filter(
+    (booking) => booking.status !== 'completed',
+  )
+  const selectedDateCompletedBookings = selectedDateBookings.filter(
+    (booking) => booking.status === 'completed',
+  )
   const claimableBookings = data.bookings
     .filter(
       (booking) =>
@@ -2860,6 +2872,80 @@ function WalkerDashboard({
     })
   }
 
+  function renderAssignedBooking(booking: Booking) {
+    const service = data.services.find(
+      (candidate) => candidate.id === booking.serviceId,
+    )
+    const customer = data.users.find(
+      (candidate) => candidate.id === booking.customerId,
+    )
+    const pets = data.pets.filter((pet) => booking.petIds.includes(pet.id))
+
+    return (
+      <article className="booking-row" key={booking.id}>
+        <div>
+          <span className={`status-badge ${booking.status}`}>
+            {statusLabel(booking.status)}
+          </span>
+          <h3>{service?.name}</h3>
+          <p>
+            {formatDate(booking.date)} at {formatBookingTime(booking)} ·{' '}
+            {customer?.name}
+          </p>
+          <div className="pet-mini-list">
+            {pets.map((pet) => (
+              <span key={pet.id}>
+                <PetSpeciesIcon species={pet.species} />
+                {pet.name}
+              </span>
+            ))}
+          </div>
+          <p className="muted">
+            Pickup: {formatDateTime(booking.pickedUpAt)} · Return:{' '}
+            {formatDateTime(booking.returnedAt)}
+          </p>
+        </div>
+        <div className="row-actions">
+          <button
+            className="button primary"
+            type="button"
+            disabled={!canPickUpBooking(booking)}
+            onClick={() =>
+              stampBooking(setData, booking.id, {
+                pickedUpAt: new Date().toISOString(),
+                status: 'in-progress',
+              })
+            }
+          >
+            <Clock size={16} />
+            Picked up
+          </button>
+          <button
+            className="button primary"
+            type="button"
+            disabled={!booking.pickedUpAt || Boolean(booking.returnedAt)}
+            onClick={() =>
+              stampBooking(setData, booking.id, {
+                returnedAt: new Date().toISOString(),
+                status: 'completed',
+              })
+            }
+          >
+            <Check size={16} />
+            Returned
+          </button>
+        </div>
+        <PaymentControls
+          booking={booking}
+          data={data}
+          setData={setData}
+          user={user}
+          canConfirm={false}
+        />
+      </article>
+    )
+  }
+
   return (
     <div className="dashboard-grid">
       <DashboardNav
@@ -2873,93 +2959,25 @@ function WalkerDashboard({
             eyebrow="Walker workflow"
             title="Log pickup and return for authorised pets."
           />
+          <label className="field-inline">
+            Job date
+            <input
+              type="date"
+              value={selectedJobDate}
+              onChange={(event) => setSelectedJobDate(event.target.value)}
+            />
+          </label>
           <div className="booking-stack">
-            {assignedBookings.length === 0 && (
+            {selectedDateActiveBookings.length === 0 && (
               <div className="empty-state">
-                <h3>No appointments assigned.</h3>
+                <h3>No appointments for this date.</h3>
                 <p>
-                  Assigned walks and sitting visits will appear here when they
-                  are allocated to you.
+                  Assigned walks and sitting visits for {formatDate(selectedJobDate)}{' '}
+                  will appear here.
                 </p>
               </div>
             )}
-            {assignedBookings.map((booking) => {
-              const service = data.services.find(
-                (candidate) => candidate.id === booking.serviceId,
-              )
-              const customer = data.users.find(
-                (candidate) => candidate.id === booking.customerId,
-              )
-              const pets = data.pets.filter((pet) =>
-                booking.petIds.includes(pet.id),
-              )
-
-              return (
-                <article className="booking-row" key={booking.id}>
-                  <div>
-                    <span className={`status-badge ${booking.status}`}>
-                      {statusLabel(booking.status)}
-                    </span>
-                    <h3>{service?.name}</h3>
-                    <p>
-                      {formatDate(booking.date)} at {formatBookingTime(booking)} ·{' '}
-                      {customer?.name}
-                    </p>
-                    <div className="pet-mini-list">
-                      {pets.map((pet) => (
-                        <span key={pet.id}>
-                          <PetSpeciesIcon species={pet.species} />
-                          {pet.name}
-                        </span>
-                      ))}
-                    </div>
-                    <p className="muted">
-                      Pickup: {formatDateTime(booking.pickedUpAt)} · Return:{' '}
-                      {formatDateTime(booking.returnedAt)}
-                    </p>
-                  </div>
-                  <div className="row-actions">
-                    <button
-                      className="button primary"
-                      type="button"
-                      disabled={!canPickUpBooking(booking)}
-                      onClick={() =>
-                        stampBooking(setData, booking.id, {
-                          pickedUpAt: new Date().toISOString(),
-                          status: 'in-progress',
-                        })
-                      }
-                    >
-                      <Clock size={16} />
-                      Picked up
-                    </button>
-                    <button
-                      className="button primary"
-                      type="button"
-                      disabled={
-                        !booking.pickedUpAt || Boolean(booking.returnedAt)
-                      }
-                      onClick={() =>
-                        stampBooking(setData, booking.id, {
-                          returnedAt: new Date().toISOString(),
-                          status: 'completed',
-                        })
-                      }
-                    >
-                      <Check size={16} />
-                      Returned
-                    </button>
-                  </div>
-                  <PaymentControls
-                    booking={booking}
-                    data={data}
-                    setData={setData}
-                    user={user}
-                    canConfirm={false}
-                  />
-                </article>
-              )
-            })}
+            {selectedDateActiveBookings.map(renderAssignedBooking)}
           </div>
           <section className="workspace nested-workspace">
             <WorkspaceTitle
@@ -3025,6 +3043,25 @@ function WalkerDashboard({
                     </article>
                   )
                 })}
+              </div>
+            )}
+          </section>
+          <section className="workspace nested-workspace">
+            <WorkspaceTitle
+              eyebrow="Completed"
+              title={`Jobs completed on ${formatDate(selectedJobDate)}.`}
+            />
+            {selectedDateCompletedBookings.length === 0 ? (
+              <div className="empty-state">
+                <h3>No jobs completed on this date.</h3>
+                <p>
+                  Returned jobs for the selected day will move here once they
+                  are completed.
+                </p>
+              </div>
+            ) : (
+              <div className="booking-stack">
+                {selectedDateCompletedBookings.map(renderAssignedBooking)}
               </div>
             )}
           </section>

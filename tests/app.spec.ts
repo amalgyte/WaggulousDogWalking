@@ -677,6 +677,39 @@ test('owner can reset a staff password with a generated handover code', async ({
   ).toBeVisible()
 })
 
+test('walker jobs are filtered by date with completed jobs separated', async ({
+  page,
+}) => {
+  const tomorrowDate = dateInputFromToday(1)
+  await loginWithEmail(page, 'walker@waggulous.local')
+
+  const activeJobs = page.locator('.booking-stack').first()
+  await expect(
+    activeJobs.locator('article').filter({ hasText: 'Mabel' }),
+  ).toBeVisible()
+  await expect(
+    activeJobs.locator('article').filter({ hasText: 'Rufus' }),
+  ).toHaveCount(0)
+
+  await page.getByLabel('Job date').fill(tomorrowDate)
+  await expect(
+    activeJobs.locator('article').filter({ hasText: 'Rufus' }),
+  ).toBeVisible()
+  await expect(
+    activeJobs.locator('article').filter({ hasText: 'Mabel' }),
+  ).toHaveCount(0)
+
+  await page.getByLabel('Job date').fill('2026-06-18')
+  await expect(
+    activeJobs.locator('article').filter({ hasText: 'Pip' }),
+  ).toHaveCount(0)
+  const completedJobs = page.locator('section.nested-workspace').filter({
+    hasText: 'Jobs completed on 18 Jun 2026.',
+  })
+  await expect(completedJobs.locator('article').filter({ hasText: 'Pip' })).toBeVisible()
+  await expect(completedJobs).toContainText('completed')
+})
+
 test('mobile MVP journey covers customer, admin, and walker workspaces', async ({
   page,
 }) => {
@@ -818,7 +851,8 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
 
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'jordan@waggulous.local', 'Temp123!')
-  await expect(page.getByText('No appointments assigned.')).toBeVisible()
+  await expect(page.getByText('No appointments for this date.')).toBeVisible()
+  await page.getByLabel('Job date').fill(claimableDate)
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
   ).toContainText('Pet sitting pop-in')
@@ -866,6 +900,7 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
     'Approved 30 minute walk booking added for Casey Phone',
   )
   await page.getByRole('button', { name: 'Jobs' }).click()
+  await page.getByLabel('Job date').fill(todayDate)
   await expect(
     page.locator('article').filter({ hasText: 'Rolo' }),
   ).toContainText('approved')
