@@ -943,12 +943,13 @@ test('owner services layout keeps slots readable on laptop screens', async ({
   expect(layout.controlsBelowSlots).toBe(true)
 })
 
-test('owner controls site-wide pet type colours', async ({ page }) => {
+test('owner controls site-wide species colours', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
   await loginWithEmail(page, 'admin@waggulous.com')
 
   await page.getByRole('button', { name: 'Theme' }).click()
   await page.locator('input[aria-label="Dog colour"]').fill('#0055aa')
+  await expect(page.getByText('Species and breeds')).toHaveCount(0)
 
   const savedColour = await page.evaluate(() => {
     const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
@@ -989,7 +990,10 @@ test('owner controls species and breed suggestions for pet entry', async ({
   await page.setViewportSize({ width: 1366, height: 768 })
   await loginWithEmail(page, 'admin@waggulous.com')
 
-  await page.getByRole('button', { name: 'Theme' }).click()
+  await page.getByRole('button', { name: 'Config' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Manage lookup data used across the app.' }),
+  ).toBeVisible()
   const catalogue = page.locator('.pet-catalogue-settings')
   const speciesForm = catalogue.locator('form').first()
   const breedForm = catalogue.locator('form').nth(1)
@@ -1013,26 +1017,24 @@ test('owner controls species and breed suggestions for pet entry', async ({
   expect(savedCatalogue).toEqual(['Angora', 'Polecat'])
 
   await page.getByRole('button', { name: 'Clients' }).click()
-  await expect(
-    page.locator('#client-pet-species-options option[value="Ferret"]'),
-  ).toHaveCount(1)
+  const clientForm = page.locator('form').filter({ hasText: 'Client name' })
+  await expect(clientForm.getByLabel('Species')).toHaveValue('')
 
-  await page.locator('input[list="client-pet-species-options"]').fill('Ferret')
-  const ferretBreeds = await page
-    .locator('#client-pet-breed-options option')
-    .evaluateAll((options) =>
-      options.map((option) => (option as HTMLOptionElement).value),
-    )
-  expect(ferretBreeds).toEqual(['Angora', 'Polecat'])
+  await clientForm.getByLabel('Species').click()
+  await expect(clientForm.getByRole('button', { name: 'Ferret' })).toBeVisible()
+  await clientForm.getByRole('button', { name: 'Ferret' }).click()
 
-  await page.locator('input[list="client-pet-species-options"]').fill('Dog')
-  const dogBreeds = await page
-    .locator('#client-pet-breed-options option')
-    .evaluateAll((options) =>
-      options.map((option) => (option as HTMLOptionElement).value),
-    )
-  expect(dogBreeds).toContain('Labrador')
-  expect(dogBreeds).not.toContain('Polecat')
+  await clientForm.getByLabel('Breed').click()
+  await expect(clientForm.getByRole('button', { name: 'Angora' })).toBeVisible()
+  await expect(clientForm.getByRole('button', { name: 'Polecat' })).toBeVisible()
+  await expect(clientForm.getByRole('button', { name: 'Labrador' })).toHaveCount(
+    0,
+  )
+
+  await clientForm.getByLabel('Species').fill('Dog')
+  await clientForm.getByLabel('Breed').click()
+  await expect(clientForm.getByRole('button', { name: 'Labrador' })).toBeVisible()
+  await expect(clientForm.getByRole('button', { name: 'Polecat' })).toHaveCount(0)
 })
 
 test('owner bookings open in an interactive staff timeline', async ({ page }) => {

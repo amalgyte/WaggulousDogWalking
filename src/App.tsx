@@ -925,6 +925,10 @@ function getCatalogueBreedOptions(data: AppData, species: string) {
     : []
 }
 
+function getAllCatalogueBreedOptions(data: AppData) {
+  return getUniqueDisplayValues(Object.values(data.petSpeciesBreedCatalogue).flat())
+}
+
 function upsertCatalogueSpecies(
   catalogue: PetSpeciesBreedCatalogue,
   species: string,
@@ -989,7 +993,6 @@ function removeCatalogueBreed(
 
 function getPetSpeciesColourEntries(data: AppData) {
   const keys = new Set([
-    ...Object.keys(defaultPetSpeciesColours),
     ...Object.keys(data.petSpeciesBreedCatalogue).map(petSpeciesColourKey),
     ...data.pets.map((pet) => petSpeciesColourKey(pet.species)),
   ])
@@ -1046,56 +1049,109 @@ function PetSpeciesIcon({
   )
 }
 
+function TypeaheadInput({
+  label,
+  value,
+  options,
+  placeholder,
+  emptyMessage,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: string[]
+  placeholder: string
+  emptyMessage: string
+  onChange: (value: string) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const query = value.trim().toLowerCase()
+  const visibleOptions = options.filter((option) =>
+    option.toLowerCase().includes(query),
+  )
+
+  return (
+    <label className="typeahead-field">
+      {label}
+      <input
+        autoComplete="off"
+        aria-expanded={isOpen}
+        value={value}
+        onBlur={() => window.setTimeout(() => setIsOpen(false), 100)}
+        onChange={(event) => {
+          onChange(event.target.value)
+          setIsOpen(true)
+        }}
+        onClick={() => setIsOpen(true)}
+        onFocus={() => setIsOpen(true)}
+        onPointerDown={() => setIsOpen(true)}
+        placeholder={placeholder}
+      />
+      {isOpen && (
+        <div className="typeahead-options" role="listbox">
+          {visibleOptions.length === 0 && (
+            <span className="typeahead-empty">{emptyMessage}</span>
+          )}
+          {visibleOptions.map((option) => (
+            <button
+              className="typeahead-option"
+              key={option}
+              type="button"
+              onMouseDown={(event) => {
+                event.preventDefault()
+                onChange(option)
+                setIsOpen(false)
+              }}
+            >
+              {option}
+            </button>
+          ))}
+        </div>
+      )}
+    </label>
+  )
+}
+
 function SpeciesBreedFields({
   data,
   species,
   breed,
-  speciesListId,
-  breedListId,
   onSpeciesChange,
   onBreedChange,
 }: {
   data: AppData
   species: string
   breed: string
-  speciesListId: string
-  breedListId: string
   onSpeciesChange: (value: string) => void
   onBreedChange: (value: string) => void
 }) {
   const speciesOptions = getCatalogueSpeciesOptions(data)
-  const breedOptions = getCatalogueBreedOptions(data, species)
+  const breedOptions = species.trim()
+    ? getCatalogueBreedOptions(data, species)
+    : getAllCatalogueBreedOptions(data)
 
   return (
     <>
-      <label>
-        Species
-        <input
-          list={speciesListId}
-          value={species}
-          onChange={(event) => onSpeciesChange(event.target.value)}
-          placeholder="Dog"
-        />
-        <datalist id={speciesListId}>
-          {speciesOptions.map((option) => (
-            <option key={option} value={option} />
-          ))}
-        </datalist>
-      </label>
-      <label>
-        Breed
-        <input
-          list={breedListId}
-          value={breed}
-          onChange={(event) => onBreedChange(event.target.value)}
-          placeholder={species.trim() ? `${species.trim()} breed` : 'Breed'}
-        />
-        <datalist id={breedListId}>
-          {breedOptions.map((option) => (
-            <option key={option} value={option} />
-          ))}
-        </datalist>
-      </label>
+      <TypeaheadInput
+        emptyMessage="No matching species."
+        label="Species"
+        onChange={onSpeciesChange}
+        options={speciesOptions}
+        placeholder="Dog"
+        value={species}
+      />
+      <TypeaheadInput
+        emptyMessage={
+          species.trim()
+            ? `No breeds configured for ${species.trim()}.`
+            : 'Choose a species or type a breed.'
+        }
+        label="Breed"
+        onChange={onBreedChange}
+        options={breedOptions}
+        placeholder={species.trim() ? `${species.trim()} breed` : 'Breed'}
+        value={breed}
+      />
     </>
   )
 }
@@ -1858,7 +1914,14 @@ function OwnerDashboard({
   user: User
 }) {
   const [tab, setTab] = useState<
-    'queue' | 'clients' | 'staff' | 'services' | 'theme' | 'chat' | 'account'
+    | 'queue'
+    | 'clients'
+    | 'staff'
+    | 'services'
+    | 'config'
+    | 'theme'
+    | 'chat'
+    | 'account'
   >('queue')
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
   const ownerQueueBookings = data.bookings
@@ -1937,6 +2000,7 @@ function OwnerDashboard({
           ['clients', 'Clients'],
           ['staff', 'Staff'],
           ['services', 'Services'],
+          ['config', 'Config'],
           ['theme', 'Theme'],
           ['chat', 'Messages'],
           ['account', 'Account'],
@@ -2102,6 +2166,8 @@ function OwnerDashboard({
       )}
 
       {tab === 'services' && <ServicesPanel data={data} setData={setData} />}
+
+      {tab === 'config' && <ConfigPanel data={data} setData={setData} />}
 
       {tab === 'theme' && <ThemePanel data={data} setData={setData} />}
 
@@ -2990,7 +3056,7 @@ function ClientBookingPanel({
   })
   const [clientPetDraft, setClientPetDraft] = useState({
     name: '',
-    species: 'Dog',
+    species: '',
     breed: '',
     age: '',
     notes: '',
@@ -3008,7 +3074,7 @@ function ClientBookingPanel({
   const [petDraft, setPetDraft] = useState({
     selectedPetIds: [] as string[],
     name: '',
-    species: 'Dog',
+    species: '',
     breed: '',
     age: '',
     notes: '',
@@ -3066,7 +3132,7 @@ function ClientBookingPanel({
   function resetClientPetDraft() {
     setClientPetDraft({
       name: '',
-      species: 'Dog',
+      species: '',
       breed: '',
       age: '',
       notes: '',
@@ -3178,7 +3244,7 @@ function ClientBookingPanel({
     setPetDraft({
       selectedPetIds: newPets.map((pet) => pet.id),
       name: '',
-      species: 'Dog',
+      species: '',
       breed: '',
       age: '',
       notes: '',
@@ -3345,7 +3411,7 @@ function ClientBookingPanel({
     setPetDraft({
       selectedPetIds: [],
       name: '',
-      species: 'Dog',
+      species: '',
       breed: '',
       age: '',
       notes: '',
@@ -3586,8 +3652,6 @@ function ClientBookingPanel({
                 data={data}
                 species={clientPetDraft.species}
                 breed={clientPetDraft.breed}
-                speciesListId="client-pet-species-options"
-                breedListId="client-pet-breed-options"
                 onSpeciesChange={(species) =>
                   setClientPetDraft({
                     ...clientPetDraft,
@@ -3709,8 +3773,6 @@ function ClientBookingPanel({
                 data={data}
                 species={petDraft.species}
                 breed={petDraft.breed}
-                speciesListId="appointment-pet-species-options"
-                breedListId="appointment-pet-breed-options"
                 onSpeciesChange={(species) =>
                   setPetDraft({
                     ...petDraft,
@@ -4933,7 +4995,7 @@ function PetsPanel({
 }) {
   const [draft, setDraft] = useState({
     name: '',
-    species: 'Dog',
+    species: '',
     breed: '',
     age: '',
     notes: '',
@@ -4962,7 +5024,7 @@ function PetsPanel({
     })
     setDraft({
       name: '',
-      species: 'Dog',
+      species: '',
       breed: '',
       age: '',
       notes: '',
@@ -5002,8 +5064,6 @@ function PetsPanel({
           data={data}
           species={draft.species}
           breed={draft.breed}
-          speciesListId="customer-pet-species-options"
-          breedListId="customer-pet-breed-options"
           onSpeciesChange={(species) =>
             setDraft({
               ...draft,
@@ -5658,54 +5718,6 @@ function ThemePanel({
 }) {
   const selectedTheme = getTheme(data.themeId)
   const petSpeciesColours = getPetSpeciesColourEntries(data)
-  const catalogueSpecies = getCatalogueSpeciesOptions(data)
-  const [speciesDraft, setSpeciesDraft] = useState('')
-  const [breedSpeciesDraft, setBreedSpeciesDraft] = useState('')
-  const [breedDraft, setBreedDraft] = useState('')
-  const requestedBreedSpecies = normaliseDisplayText(breedSpeciesDraft)
-  const selectedBreedSpecies =
-    (findCatalogueSpeciesKey(
-      data.petSpeciesBreedCatalogue,
-      requestedBreedSpecies,
-    ) ?? requestedBreedSpecies) ||
-    catalogueSpecies[0] ||
-    ''
-
-  function addSpecies(event: FormEvent) {
-    event.preventDefault()
-
-    const species = normaliseDisplayText(speciesDraft)
-    if (!species) return
-
-    setData((current) => ({
-      ...current,
-      petSpeciesBreedCatalogue: upsertCatalogueSpecies(
-        current.petSpeciesBreedCatalogue,
-        species,
-      ),
-    }))
-    setBreedSpeciesDraft(species)
-    setSpeciesDraft('')
-  }
-
-  function addBreed(event: FormEvent) {
-    event.preventDefault()
-
-    const species = selectedBreedSpecies || normaliseDisplayText(breedSpeciesDraft)
-    const breed = normaliseDisplayText(breedDraft)
-    if (!species || !breed) return
-
-    setData((current) => ({
-      ...current,
-      petSpeciesBreedCatalogue: addCatalogueBreed(
-        current.petSpeciesBreedCatalogue,
-        species,
-        breed,
-      ),
-    }))
-    setBreedSpeciesDraft(species)
-    setBreedDraft('')
-  }
 
   function updatePetSpeciesColour(speciesKey: string, colour: string) {
     if (!isHexColour(colour)) return
@@ -5800,9 +5812,114 @@ function ThemePanel({
           )
         })}
       </div>
+      <section className="pet-colour-settings">
+        <div className="section-heading compact">
+          <p className="eyebrow">Species styling</p>
+          <h3>Species colours</h3>
+        </div>
+        <div className="pet-colour-grid">
+          {petSpeciesColours.length === 0 && (
+            <p className="muted">
+              No species configured yet. Add species in Config to set colours.
+            </p>
+          )}
+          {petSpeciesColours.map(({ colour, key, label }) => (
+            <div className="pet-colour-control" key={key}>
+              <label>
+                <span>
+                  <PetSpeciesIcon species={key} colour={colour} size={18} />
+                  {label} colour
+                </span>
+                <input
+                  aria-label={`${label} colour`}
+                  type="color"
+                  value={colour}
+                  onChange={(event) =>
+                    updatePetSpeciesColour(key, event.target.value)
+                  }
+                />
+              </label>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label={`Reset ${label} colour`}
+                onClick={() => resetPetSpeciesColour(key)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    </section>
+  )
+}
+
+function ConfigPanel({
+  data,
+  setData,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+}) {
+  const catalogueSpecies = getCatalogueSpeciesOptions(data)
+  const [speciesDraft, setSpeciesDraft] = useState('')
+  const [breedSpeciesDraft, setBreedSpeciesDraft] = useState('')
+  const [breedDraft, setBreedDraft] = useState('')
+  const requestedBreedSpecies = normaliseDisplayText(breedSpeciesDraft)
+  const selectedBreedSpecies =
+    (findCatalogueSpeciesKey(
+      data.petSpeciesBreedCatalogue,
+      requestedBreedSpecies,
+    ) ?? requestedBreedSpecies) ||
+    catalogueSpecies[0] ||
+    ''
+
+  function addSpecies(event: FormEvent) {
+    event.preventDefault()
+
+    const species = normaliseDisplayText(speciesDraft)
+    if (!species) return
+
+    setData((current) => ({
+      ...current,
+      petSpeciesBreedCatalogue: upsertCatalogueSpecies(
+        current.petSpeciesBreedCatalogue,
+        species,
+      ),
+    }))
+    setBreedSpeciesDraft(species)
+    setSpeciesDraft('')
+  }
+
+  function addBreed(event: FormEvent) {
+    event.preventDefault()
+
+    const species = selectedBreedSpecies || normaliseDisplayText(breedSpeciesDraft)
+    const breed = normaliseDisplayText(breedDraft)
+    if (!species || !breed) return
+
+    setData((current) => ({
+      ...current,
+      petSpeciesBreedCatalogue: addCatalogueBreed(
+        current.petSpeciesBreedCatalogue,
+        species,
+        breed,
+      ),
+    }))
+    setBreedSpeciesDraft(species)
+    setBreedDraft('')
+  }
+
+  return (
+    <section className="workspace">
+      <WorkspaceTitle
+        eyebrow="Config"
+        title="Manage lookup data used across the app."
+      />
       <section className="pet-colour-settings pet-catalogue-settings">
         <div className="section-heading compact">
-          <p className="eyebrow">Owner/admin defaults</p>
+          <p className="eyebrow">Lookup data</p>
           <h3>Species and breeds</h3>
         </div>
         <div className="catalogue-forms">
@@ -5908,40 +6025,6 @@ function ThemePanel({
                 <X size={16} />
               </button>
             </article>
-          ))}
-        </div>
-      </section>
-      <section className="pet-colour-settings">
-        <div className="section-heading compact">
-          <p className="eyebrow">Owner/admin defaults</p>
-          <h3>Pet type colours</h3>
-        </div>
-        <div className="pet-colour-grid">
-          {petSpeciesColours.map(({ colour, key, label }) => (
-            <div className="pet-colour-control" key={key}>
-              <label>
-                <span>
-                  <PetSpeciesIcon species={key} colour={colour} size={18} />
-                  {label} colour
-                </span>
-                <input
-                  aria-label={`${label} colour`}
-                  type="color"
-                  value={colour}
-                  onChange={(event) =>
-                    updatePetSpeciesColour(key, event.target.value)
-                  }
-                />
-              </label>
-              <button
-                className="icon-button"
-                type="button"
-                aria-label={`Reset ${label} colour`}
-                onClick={() => resetPetSpeciesColour(key)}
-              >
-                <X size={16} />
-              </button>
-            </div>
           ))}
         </div>
       </section>
