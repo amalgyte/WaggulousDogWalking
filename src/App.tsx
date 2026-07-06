@@ -3192,6 +3192,13 @@ function ClientBookingPanel({
         )
         .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
     : []
+  const pendingStaffPayments = data.transactions
+    .filter((transaction) => transaction.status === 'payment-pending')
+    .sort(
+      (a, b) =>
+        (b.createdAt ?? b.date).localeCompare(a.createdAt ?? a.date) ||
+        b.date.localeCompare(a.date),
+    )
 
   function resetClientPetDraft() {
     setClientPetDraft({
@@ -3582,6 +3589,12 @@ function ClientBookingPanel({
       }.`,
     )
     setBulkPaymentDraft({ amount: '', method: 'cash' })
+  }
+
+  function confirmStaffPayment(transactionId: string) {
+    confirmPendingPayment(setData, transactionId, user.id)
+    setError('')
+    setSuccessMessage('Staff payment confirmed into the company account.')
   }
 
   return (
@@ -4069,6 +4082,63 @@ function ClientBookingPanel({
             eyebrow="Client payments"
             title="Record one payment across completed services."
           />
+          <section className="workspace nested-workspace">
+            <WorkspaceTitle
+              eyebrow="Staff payments"
+              title="Confirm cash received into the company account."
+            />
+            {pendingStaffPayments.length === 0 ? (
+              <div className="empty-state">
+                <h3>No staff payments awaiting confirmation.</h3>
+                <p>
+                  Cash or other payments marked received by staff will appear
+                  here for admin confirmation.
+                </p>
+              </div>
+            ) : (
+              <div className="payment-pending-list">
+                {pendingStaffPayments.map((payment) => {
+                  const booking = data.bookings.find(
+                    (candidate) => candidate.id === payment.bookingId,
+                  )
+                  const customer = data.users.find(
+                    (candidate) => candidate.id === payment.customerId,
+                  )
+                  const recorder = data.users.find(
+                    (candidate) => candidate.id === payment.recordedById,
+                  )
+                  const service = booking
+                    ? data.services.find(
+                        (candidate) => candidate.id === booking.serviceId,
+                      )
+                    : undefined
+
+                  return (
+                    <div className="pending-payment-row" key={payment.id}>
+                      <span>
+                        Pending {payment.method ?? 'other'} payment ·{' '}
+                        {formatMoney(payment.amount)} · {customer?.name ?? 'Client'}{' '}
+                        {booking
+                          ? `· ${service?.name ?? 'Service'} on ${formatDate(
+                              booking.date,
+                            )}`
+                          : ''}
+                        {recorder ? ` · recorded by ${recorder.name}` : ''}
+                      </span>
+                      <button
+                        className="button primary"
+                        type="button"
+                        onClick={() => confirmStaffPayment(payment.id)}
+                      >
+                        <Check size={16} />
+                        Confirm into company account
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
           <form className="form-grid" onSubmit={recordBulkPayment}>
             <label className="wide">
               Client
@@ -6842,19 +6912,7 @@ function PaymentControls({
   }
 
   function confirmPayment(transactionId: string) {
-    setData((current) => ({
-      ...current,
-      transactions: current.transactions.map((transaction) =>
-        transaction.id === transactionId
-          ? {
-              ...transaction,
-              status: 'paid',
-              confirmedById: user.id,
-              description: `Confirmed ${transaction.method ?? 'other'} payment`,
-            }
-          : transaction,
-      ),
-    }))
+    confirmPendingPayment(setData, transactionId, user.id)
   }
 
   if (!canRecord && pendingPayments.length === 0) return null
@@ -6921,6 +6979,26 @@ function PaymentControls({
       )}
     </div>
   )
+}
+
+function confirmPendingPayment(
+  setData: Dispatch<SetStateAction<AppData>>,
+  transactionId: string,
+  confirmerId: string,
+) {
+  setData((current) => ({
+    ...current,
+    transactions: current.transactions.map((transaction) =>
+      transaction.id === transactionId
+        ? {
+            ...transaction,
+            status: 'paid',
+            confirmedById: confirmerId,
+            description: `Confirmed ${transaction.method ?? 'other'} payment`,
+          }
+        : transaction,
+    ),
+  }))
 }
 
 function approveBooking(

@@ -710,6 +710,68 @@ test('walker jobs are filtered by date with completed jobs separated', async ({
   await expect(completedJobs).toContainText('completed')
 })
 
+test('admin confirms cash received by staff into the company account', async ({
+  page,
+}) => {
+  await loginWithEmail(page, 'walker@waggulous.local')
+
+  const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
+  await mabelJob.getByRole('button', { name: /picked up/i }).click()
+  await mabelJob.getByRole('button', { name: /returned/i }).click()
+  await mabelJob.getByLabel('Payment received').fill('14')
+  await mabelJob.getByLabel('Method').selectOption('cash')
+  await mabelJob.getByRole('button', { name: /mark received/i }).click()
+  await expect(mabelJob).toContainText('Pending cash payment')
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'admin@waggulous.com')
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByRole('button', { name: 'Payments' }).click()
+
+  const pendingPayment = page
+    .locator('.pending-payment-row')
+    .filter({ hasText: 'Pending cash payment' })
+    .filter({ hasText: 'Sam Taylor' })
+  await expect(pendingPayment).toContainText('recorded by Alex Walker')
+  await pendingPayment
+    .getByRole('button', { name: /confirm into company account/i })
+    .click()
+  await expect(page.getByRole('status')).toContainText(
+    'Staff payment confirmed into the company account.',
+  )
+  await expect(pendingPayment).toHaveCount(0)
+
+  const paymentState = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.transactions
+      .filter(
+        (transaction: { bookingId?: string; type?: string }) =>
+          transaction.bookingId === 'b-1' && transaction.type === 'payment',
+      )
+      .map(
+        (transaction: {
+          status: string
+          method?: string
+          recordedById?: string
+          confirmedById?: string
+        }) => ({
+          status: transaction.status,
+          method: transaction.method,
+          recordedById: transaction.recordedById,
+          confirmedById: transaction.confirmedById,
+        }),
+      )
+  })
+  expect(paymentState).toEqual([
+    {
+      status: 'paid',
+      method: 'cash',
+      recordedById: 'u-walker',
+      confirmedById: 'u-admin',
+    },
+  ])
+})
+
 test('mobile MVP journey covers customer, admin, and walker workspaces', async ({
   page,
 }) => {
