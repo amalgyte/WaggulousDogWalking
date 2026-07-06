@@ -7,12 +7,12 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run dev -- --host 127.0.0.1',
+    command: 'npm run dev -- --host 127.0.0.1 --strictPort',
     env: {
       VITE_WAGGULOUS_STORAGE: 'local',
     },
     url: 'http://127.0.0.1:5173',
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [

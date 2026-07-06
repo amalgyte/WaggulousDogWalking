@@ -39,7 +39,7 @@ import heroImage from './assets/waggulous-hero.png'
 import { appDataRef } from './firebase'
 import './App.css'
 
-type Role = 'customer' | 'owner' | 'walker'
+type Role = 'customer' | 'admin' | 'owner' | 'walker'
 type ServiceType = 'walking' | 'sitting'
 type ThemeId =
   | 'waggulous'
@@ -183,10 +183,12 @@ type Message = {
 }
 
 type PetSpeciesColours = Record<string, string>
+type PetSpeciesBreedCatalogue = Record<string, string[]>
 
 type AppData = {
   themeId: ThemeId
   petSpeciesColours: PetSpeciesColours
+  petSpeciesBreedCatalogue: PetSpeciesBreedCatalogue
   users: User[]
   pets: Pet[]
   services: Service[]
@@ -199,8 +201,7 @@ type AppData = {
 
 const storageKey = 'waggulous-mvp-data'
 const sessionKey = 'waggulous-session-user'
-const shouldSyncFirebase =
-  import.meta.env.VITE_WAGGULOUS_STORAGE !== 'local' && !navigator.webdriver
+const shouldSyncFirebase = import.meta.env.VITE_WAGGULOUS_STORAGE !== 'local'
 const siteThemes: {
   id: ThemeId
   name: string
@@ -378,487 +379,25 @@ const PetSpeciesColourContext = createContext<PetSpeciesColours>(
 const seedData: AppData = {
   themeId: 'waggulous',
   petSpeciesColours: defaultPetSpeciesColours,
+  petSpeciesBreedCatalogue: {},
   users: [
     {
-      id: 'u-owner',
-      name: 'Waggulous Owner',
-      email: 'owner@waggulous.local',
-      password: 'demo',
-      role: 'owner',
-      phone: '07700 900111',
-      address: 'Waggulous HQ, High Street',
-    },
-    {
-      id: 'u-walker',
-      name: 'Alex Walker',
-      email: 'walker@waggulous.local',
-      password: 'demo',
-      role: 'walker',
-      phone: '07700 900222',
-      address: '14 Park View, Bristol',
-      canSelfAssign: true,
-      holidays: [
-        {
-          id: 'h-alex-1',
-          startDate: '2026-07-15',
-          endDate: '2026-07-18',
-          allDay: true,
-          reason: 'Family break',
-          status: 'active',
-        },
-      ],
-    },
-    {
-      id: 'u-customer',
-      name: 'Sam Taylor',
-      email: 'sam@example.com',
-      password: 'demo',
-      role: 'customer',
-      phone: '07700 900101',
-      address: '12 River Walk, Bristol',
-    },
-    {
-      id: 'u-maya',
-      name: 'Maya Chen',
-      email: 'maya@waggulous.local',
-      password: 'demo',
-      role: 'walker',
-      phone: '07700 900333',
-      address: '8 Orchard Terrace, Bristol',
-      canSelfAssign: true,
-    },
-    {
-      id: 'u-priya',
-      name: 'Priya Shah',
-      email: 'priya@waggulous.local',
-      password: 'demo',
-      role: 'walker',
-      phone: '07700 900444',
-      address: '19 Willow Road, Bristol',
-      canSelfAssign: true,
-    },
-    {
-      id: 'u-tom',
-      name: 'Tom Evans',
-      email: 'tom@waggulous.local',
-      password: 'demo',
-      role: 'walker',
-      phone: '07700 900555',
-      address: '3 Clifton Mews, Bristol',
-      canSelfAssign: false,
-    },
-    {
-      id: 'u-eliza',
-      name: 'Eliza Moore',
-      email: 'eliza.moore@example.com',
-      password: 'demo',
-      role: 'customer',
-      phone: '07700 910101',
-      address: '24 Sycamore Avenue, Bristol',
-    },
-    {
-      id: 'u-omar',
-      name: 'Omar Khan',
-      email: 'omar.khan@example.com',
-      password: 'demo',
-      role: 'customer',
-      phone: '07700 910202',
-      address: '7 Harbour View, Bristol',
-    },
-    {
-      id: 'u-grace',
-      name: 'Grace Bell',
-      email: 'grace.bell@example.com',
-      password: 'demo',
-      role: 'customer',
-      phone: '07700 910303',
-      address: '41 Meadowbank Road, Bristol',
-    },
-    {
-      id: 'u-theo',
-      name: 'Theo Harris',
-      email: 'theo.harris@example.com',
-      password: 'demo',
-      role: 'customer',
-      phone: '07700 910404',
-      address: '16 Kingsdown Parade, Bristol',
+      id: 'u-admin',
+      name: 'Waggulous Admin',
+      email: 'admin@waggulous.com',
+      password: 'Admin123!',
+      role: 'admin',
+      phone: '',
+      address: '',
     },
   ],
-  pets: [
-    {
-      id: 'p-mabel',
-      ownerId: 'u-customer',
-      name: 'Mabel',
-      species: 'Dog',
-      breed: 'Cocker Spaniel',
-      age: '4',
-      notes: 'Loves woodland routes, nervous around scooters.',
-    },
-    {
-      id: 'p-pip',
-      ownerId: 'u-customer',
-      name: 'Pip',
-      species: 'Cat',
-      breed: 'Domestic shorthair',
-      age: '8',
-      notes: 'Needs evening feeding and a litter tray check.',
-    },
-    {
-      id: 'p-rufus',
-      ownerId: 'u-eliza',
-      name: 'Rufus',
-      species: 'Dog',
-      breed: 'Border Terrier',
-      age: '6',
-      notes: 'Can be stubborn near the bakery. Treats in the porch cupboard.',
-    },
-    {
-      id: 'p-tilly',
-      ownerId: 'u-eliza',
-      name: 'Tilly',
-      species: 'Cat',
-      breed: 'Maine Coon',
-      age: '5',
-      notes: 'Brush briefly after feeding and keep the kitchen window closed.',
-    },
-    {
-      id: 'p-nori',
-      ownerId: 'u-omar',
-      name: 'Nori',
-      species: 'Bird',
-      breed: 'Cockatiel',
-      age: '3',
-      notes: 'Fresh water, seed top-up, and ten minutes of quiet company.',
-    },
-    {
-      id: 'p-biscuit',
-      ownerId: 'u-omar',
-      name: 'Biscuit',
-      species: 'Rabbit',
-      breed: 'Mini Lop',
-      age: '2',
-      notes: 'Check hay rack and make sure the garden run latch is clipped.',
-    },
-    {
-      id: 'p-luna',
-      ownerId: 'u-grace',
-      name: 'Luna',
-      species: 'Dog',
-      breed: 'Whippet',
-      age: '4',
-      notes: 'Nervous around skateboards. Use the yellow lead for walks.',
-    },
-    {
-      id: 'p-miso',
-      ownerId: 'u-grace',
-      name: 'Miso',
-      species: 'Dog',
-      breed: 'Shih Tzu',
-      age: '9',
-      notes: 'Shorter route only and wipe paws before coming inside.',
-    },
-    {
-      id: 'p-goldie',
-      ownerId: 'u-theo',
-      name: 'Goldie',
-      species: 'Fish',
-      breed: 'Goldfish',
-      age: '1',
-      notes: 'One small pinch of food. Do not top up the tank.',
-    },
-    {
-      id: 'p-shelly',
-      ownerId: 'u-theo',
-      name: 'Shelly',
-      species: 'Turtle',
-      breed: 'Musk turtle',
-      age: '7',
-      notes: 'Check basking lamp and remove any leftover greens.',
-    },
-    {
-      id: 'p-peanut',
-      ownerId: 'u-theo',
-      name: 'Peanut',
-      species: 'Hamster',
-      breed: 'Syrian hamster',
-      age: '1',
-      notes: 'Evening check only. Food scoop is beside the enclosure.',
-    },
-  ],
-  services: [
-    {
-      id: 's-walk-30',
-      name: '30 minute walk',
-      type: 'walking',
-      description: 'Local solo or small-group walk with clear care updates.',
-      duration: '30 min',
-      price: 14,
-      active: true,
-    },
-    {
-      id: 's-walk-60',
-      name: '60 minute adventure walk',
-      type: 'walking',
-      description: 'Longer route for energetic dogs with photo updates.',
-      duration: '60 min',
-      price: 22,
-      active: true,
-    },
-    {
-      id: 's-pop-in',
-      name: 'Pet sitting pop-in',
-      type: 'sitting',
-      description: 'Feeding, water, comfort checks, litter or garden break.',
-      duration: '25 min',
-      price: 12,
-      active: true,
-    },
-    {
-      id: 's-evening',
-      name: 'Evening sit',
-      type: 'sitting',
-      description: 'Calm in-home companionship for dinner and bedtime routines.',
-      duration: '2 hours',
-      price: 38,
-      active: true,
-    },
-  ],
-  serviceSlots: [
-    {
-      id: 'slot-walk-early',
-      serviceId: 's-walk-30',
-      label: 'Early morning walk',
-      days: [1, 2, 3, 4, 5],
-      startTime: '07:00',
-      endTime: '08:00',
-      capacity: 4,
-      active: true,
-    },
-    {
-      id: 'slot-walk-lunch',
-      serviceId: 's-walk-30',
-      label: 'Lunchtime walk',
-      days: [2, 4],
-      startTime: '12:00',
-      endTime: '13:00',
-      capacity: 4,
-      active: true,
-    },
-    {
-      id: 'slot-walk-evening',
-      serviceId: 's-walk-30',
-      label: 'Evening walk',
-      days: [1, 2, 3, 4, 5],
-      startTime: '18:00',
-      endTime: '19:00',
-      capacity: 4,
-      active: true,
-    },
-    {
-      id: 'slot-pop-in-daily',
-      serviceId: 's-pop-in',
-      label: 'Pet sitting pop-in window',
-      days: [0, 1, 2, 3, 4, 5, 6],
-      startTime: '10:00',
-      endTime: '12:00',
-      capacity: 3,
-      active: true,
-    },
-  ],
+  pets: [],
+  services: [],
+  serviceSlots: [],
   recurringBookings: [],
-  bookings: [
-    {
-      id: 'b-1',
-      customerId: 'u-customer',
-      petIds: ['p-mabel'],
-      serviceId: 's-walk-30',
-      date: formatDateInputValue(),
-      time: '09:30',
-      notes: 'Please use the blue harness.',
-      status: 'approved',
-      price: 14,
-      walkerId: 'u-walker',
-    },
-    {
-      id: 'b-demo-1',
-      customerId: 'u-customer',
-      petIds: ['p-pip'],
-      serviceId: 's-pop-in',
-      slotId: 'slot-pop-in-daily',
-      date: formatDateInputValue(),
-      time: '10:30',
-      endTime: '10:55',
-      notes: 'Pip needs food, water, and litter checked before lunch.',
-      status: 'approved',
-      price: 12,
-      walkerId: 'u-maya',
-    },
-    {
-      id: 'b-demo-2',
-      customerId: 'u-eliza',
-      petIds: ['p-rufus'],
-      serviceId: 's-walk-30',
-      slotId: 'slot-walk-early',
-      date: addDaysInputValue(formatDateInputValue(), 1),
-      time: '07:30',
-      endTime: '08:00',
-      notes: 'Rufus is best walked before the school run gets busy.',
-      status: 'approved',
-      price: 14,
-      walkerId: 'u-walker',
-    },
-    {
-      id: 'b-demo-3',
-      customerId: 'u-omar',
-      petIds: ['p-nori', 'p-biscuit'],
-      serviceId: 's-pop-in',
-      slotId: 'slot-pop-in-daily',
-      date: addDaysInputValue(formatDateInputValue(), 1),
-      time: '10:00',
-      endTime: '10:35',
-      notes: 'Quiet visit for Nori, then check Biscuit has hay and water.',
-      status: 'approved',
-      price: 12,
-      walkerId: 'u-priya',
-    },
-    {
-      id: 'b-demo-4',
-      customerId: 'u-grace',
-      petIds: ['p-luna', 'p-miso'],
-      serviceId: 's-walk-60',
-      slotId: 'slot-walk-lunch',
-      date: addDaysInputValue(formatDateInputValue(), 1),
-      time: '12:30',
-      endTime: '13:30',
-      notes: 'Keep Miso to the flatter route and give Luna space near roads.',
-      status: 'approved',
-      price: 22,
-      walkerId: 'u-maya',
-    },
-    {
-      id: 'b-demo-5',
-      customerId: 'u-theo',
-      petIds: ['p-goldie', 'p-shelly', 'p-peanut'],
-      serviceId: 's-pop-in',
-      slotId: 'slot-pop-in-daily',
-      date: addDaysInputValue(formatDateInputValue(), 2),
-      time: '09:15',
-      endTime: '09:45',
-      notes: 'Small pet care round: fish feed, turtle lamp, hamster food.',
-      status: 'approved',
-      price: 12,
-      walkerId: 'u-tom',
-    },
-    {
-      id: 'b-demo-6',
-      customerId: 'u-eliza',
-      petIds: ['p-rufus', 'p-tilly'],
-      serviceId: 's-pop-in',
-      date: addDaysInputValue(formatDateInputValue(), 2),
-      time: '14:00',
-      endTime: '14:30',
-      notes: 'Requested afternoon check while Eliza is at a work event.',
-      status: 'requested',
-      price: 12,
-    },
-    {
-      id: 'b-demo-7',
-      customerId: 'u-eliza',
-      petIds: ['p-rufus'],
-      serviceId: 's-walk-30',
-      slotId: 'slot-walk-early',
-      date: addDaysInputValue(formatDateInputValue(), 3),
-      time: '08:00',
-      endTime: '08:30',
-      notes: 'Rufus can join the early neighbourhood loop.',
-      status: 'approved',
-      price: 14,
-      walkerId: 'u-priya',
-    },
-    {
-      id: 'b-demo-8',
-      customerId: 'u-grace',
-      petIds: ['p-luna'],
-      serviceId: 's-walk-30',
-      date: addDaysInputValue(formatDateInputValue(), 3),
-      time: '11:30',
-      endTime: '12:00',
-      notes: 'Grace asked whether Luna can have a quieter mid-morning walk.',
-      status: 'requested',
-      price: 14,
-    },
-    {
-      id: 'b-demo-9',
-      customerId: 'u-customer',
-      petIds: ['p-pip'],
-      serviceId: 's-evening',
-      date: addDaysInputValue(formatDateInputValue(), 3),
-      time: '18:30',
-      endTime: '20:30',
-      notes: 'Evening companionship and feeding while Sam is away.',
-      status: 'approved',
-      price: 38,
-      walkerId: 'u-priya',
-    },
-    {
-      id: 'b-demo-10',
-      customerId: 'u-grace',
-      petIds: ['p-luna', 'p-miso'],
-      serviceId: 's-walk-30',
-      slotId: 'slot-walk-evening',
-      date: addDaysInputValue(formatDateInputValue(), 4),
-      time: '18:00',
-      endTime: '18:45',
-      notes: 'Evening loop after the pavement cools down.',
-      status: 'approved',
-      price: 14,
-      walkerId: 'u-walker',
-    },
-    {
-      id: 'b-2',
-      customerId: 'u-customer',
-      petIds: ['p-pip'],
-      serviceId: 's-pop-in',
-      date: '2026-06-18',
-      time: '18:00',
-      notes: 'Food is in the utility room.',
-      status: 'completed',
-      price: 12,
-      walkerId: 'u-walker',
-      pickedUpAt: '2026-06-18T18:02:00.000Z',
-      returnedAt: '2026-06-18T18:26:00.000Z',
-    },
-  ],
-  transactions: [
-    {
-      id: 't-1',
-      customerId: 'u-customer',
-      bookingId: 'b-1',
-      date: formatDateInputValue(),
-      description: 'Approved 30 minute walk for Mabel',
-      amount: 14,
-      status: 'owed',
-    },
-    {
-      id: 't-2',
-      customerId: 'u-customer',
-      bookingId: 'b-2',
-      date: '2026-06-18',
-      description: 'Paid pet sitting pop-in for Pip',
-      amount: 12,
-      status: 'paid',
-    },
-  ],
-  messages: [
-    {
-      id: 'm-1',
-      bookingId: 'b-1',
-      senderId: 'u-owner',
-      recipientId: 'u-customer',
-      body: 'Alex is confirmed for Monday morning. We will log pickup and return in the app.',
-      createdAt: '2026-06-26T14:30:00.000Z',
-    },
-  ],
+  bookings: [],
+  transactions: [],
+  messages: [],
 }
 
 function loadData(): AppData {
@@ -884,10 +423,13 @@ function normaliseAppData(value: unknown): AppData {
   const data =
     value && typeof value === 'object' ? (value as Partial<AppData>) : {}
 
-  return mergeDemoSeedData({
-    themeId: isThemeId(data.themeId) ? data.themeId : seedData.themeId,
-    petSpeciesColours: mergePetSpeciesColours(data.petSpeciesColours),
-    users: normaliseCollection<User>(data.users),
+    return mergeDemoSeedData({
+      themeId: isThemeId(data.themeId) ? data.themeId : seedData.themeId,
+      petSpeciesColours: mergePetSpeciesColours(data.petSpeciesColours),
+      petSpeciesBreedCatalogue: normalisePetSpeciesBreedCatalogue(
+        data.petSpeciesBreedCatalogue,
+      ),
+      users: normaliseCollection<User>(data.users),
     pets: normaliseCollection<Pet>(data.pets),
     services: normaliseCollection<Service>(data.services),
     serviceSlots: normaliseCollection<ServiceSlot>(data.serviceSlots),
@@ -898,6 +440,14 @@ function normaliseAppData(value: unknown): AppData {
     transactions: normaliseCollection<Transaction>(data.transactions),
     messages: normaliseCollection<Message>(data.messages),
   })
+}
+
+function serialiseAppData(data: AppData) {
+  return JSON.stringify(data)
+}
+
+function firebaseWritableAppData(data: AppData): AppData {
+  return JSON.parse(serialiseAppData(data)) as AppData
 }
 
 function mergeCollectionById<T extends { id: string }>(
@@ -932,6 +482,9 @@ function mergeDemoSeedData(data: AppData): AppData {
   return {
     ...data,
     petSpeciesColours: mergePetSpeciesColours(data.petSpeciesColours),
+    petSpeciesBreedCatalogue: normalisePetSpeciesBreedCatalogue(
+      data.petSpeciesBreedCatalogue,
+    ),
     users: mergeSeededUsers(data.users ?? []),
     pets: mergeCollectionById(data.pets ?? [], seedData.pets),
     services: mergeCollectionById(data.services ?? [], seedData.services),
@@ -1254,6 +807,10 @@ function normaliseSpecies(species: string) {
   return species.trim().toLowerCase()
 }
 
+function normaliseDisplayText(value: string) {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
 function petSpeciesColourKey(species: string) {
   return normaliseSpecies(species) || 'pet'
 }
@@ -1304,9 +861,136 @@ function formatSpeciesLabel(species: string) {
     .join(' ')
 }
 
+function getUniqueDisplayValues(values: string[]) {
+  const options = new Map<string, string>()
+
+  values.forEach((value) => {
+    const text = normaliseDisplayText(value)
+    const key = text.toLowerCase()
+    if (text && !options.has(key)) {
+      options.set(key, text)
+    }
+  })
+
+  return [...options.values()].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' }),
+  )
+}
+
+function normalisePetSpeciesBreedCatalogue(
+  value: unknown,
+): PetSpeciesBreedCatalogue {
+  if (!value || typeof value !== 'object') return {}
+
+  return Object.entries(value as Record<string, unknown>).reduce<
+    PetSpeciesBreedCatalogue
+  >((catalogue, [species, breeds]) => {
+    const speciesLabel = normaliseDisplayText(species)
+    if (!speciesLabel) return catalogue
+
+    return {
+      ...catalogue,
+      [speciesLabel]: getUniqueDisplayValues(
+        Array.isArray(breeds)
+          ? breeds.filter((breed): breed is string => typeof breed === 'string')
+          : [],
+      ),
+    }
+  }, {})
+}
+
+function getCatalogueSpeciesOptions(data: AppData) {
+  return getUniqueDisplayValues(Object.keys(data.petSpeciesBreedCatalogue))
+}
+
+function findCatalogueSpeciesKey(
+  catalogue: PetSpeciesBreedCatalogue,
+  species: string,
+) {
+  const key = normaliseSpecies(species)
+
+  return Object.keys(catalogue).find(
+    (candidate) => normaliseSpecies(candidate) === key,
+  )
+}
+
+function getCatalogueBreedOptions(data: AppData, species: string) {
+  const speciesKey = findCatalogueSpeciesKey(
+    data.petSpeciesBreedCatalogue,
+    species,
+  )
+
+  return speciesKey
+    ? getUniqueDisplayValues(data.petSpeciesBreedCatalogue[speciesKey] ?? [])
+    : []
+}
+
+function upsertCatalogueSpecies(
+  catalogue: PetSpeciesBreedCatalogue,
+  species: string,
+) {
+  const speciesLabel = normaliseDisplayText(species)
+  if (!speciesLabel) return catalogue
+
+  const existingKey = findCatalogueSpeciesKey(catalogue, speciesLabel)
+  if (existingKey) return catalogue
+
+  return {
+    ...catalogue,
+    [speciesLabel]: [],
+  }
+}
+
+function addCatalogueBreed(
+  catalogue: PetSpeciesBreedCatalogue,
+  species: string,
+  breed: string,
+) {
+  const speciesLabel = normaliseDisplayText(species)
+  const breedLabel = normaliseDisplayText(breed)
+  if (!speciesLabel || !breedLabel) return catalogue
+
+  const existingKey = findCatalogueSpeciesKey(catalogue, speciesLabel)
+  const key = existingKey ?? speciesLabel
+
+  return {
+    ...catalogue,
+    [key]: getUniqueDisplayValues([...(catalogue[key] ?? []), breedLabel]),
+  }
+}
+
+function removeCatalogueSpecies(
+  catalogue: PetSpeciesBreedCatalogue,
+  species: string,
+) {
+  const existingKey = findCatalogueSpeciesKey(catalogue, species)
+  if (!existingKey) return catalogue
+
+  const nextCatalogue = { ...catalogue }
+  delete nextCatalogue[existingKey]
+  return nextCatalogue
+}
+
+function removeCatalogueBreed(
+  catalogue: PetSpeciesBreedCatalogue,
+  species: string,
+  breed: string,
+) {
+  const existingKey = findCatalogueSpeciesKey(catalogue, species)
+  if (!existingKey) return catalogue
+
+  return {
+    ...catalogue,
+    [existingKey]: (catalogue[existingKey] ?? []).filter(
+      (candidate) => candidate.toLowerCase() !== breed.toLowerCase(),
+    ),
+  }
+}
+
 function getPetSpeciesColourEntries(data: AppData) {
   const keys = new Set([
     ...Object.keys(defaultPetSpeciesColours),
+    ...Object.keys(data.petSpeciesBreedCatalogue).map(petSpeciesColourKey),
     ...data.pets.map((pet) => petSpeciesColourKey(pet.species)),
   ])
   const colours = mergePetSpeciesColours(data.petSpeciesColours)
@@ -1359,6 +1043,60 @@ function PetSpeciesIcon({
           colour ?? getPetSpeciesColour(colourMap, species),
       } as CSSProperties}
     />
+  )
+}
+
+function SpeciesBreedFields({
+  data,
+  species,
+  breed,
+  speciesListId,
+  breedListId,
+  onSpeciesChange,
+  onBreedChange,
+}: {
+  data: AppData
+  species: string
+  breed: string
+  speciesListId: string
+  breedListId: string
+  onSpeciesChange: (value: string) => void
+  onBreedChange: (value: string) => void
+}) {
+  const speciesOptions = getCatalogueSpeciesOptions(data)
+  const breedOptions = getCatalogueBreedOptions(data, species)
+
+  return (
+    <>
+      <label>
+        Species
+        <input
+          list={speciesListId}
+          value={species}
+          onChange={(event) => onSpeciesChange(event.target.value)}
+          placeholder="Dog"
+        />
+        <datalist id={speciesListId}>
+          {speciesOptions.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
+      </label>
+      <label>
+        Breed
+        <input
+          list={breedListId}
+          value={breed}
+          onChange={(event) => onBreedChange(event.target.value)}
+          placeholder={species.trim() ? `${species.trim()} breed` : 'Breed'}
+        />
+        <datalist id={breedListId}>
+          {breedOptions.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
+      </label>
+    </>
   )
 }
 
@@ -1510,6 +1248,10 @@ function resetScroll() {
   document.body.scrollTop = 0
 }
 
+function userIsAdmin(user: User) {
+  return user.role === 'admin' || user.role === 'owner'
+}
+
 function App() {
   const [data, setData] = useState<AppData>(() => loadData())
   const latestDataRef = useRef(data)
@@ -1544,20 +1286,22 @@ function App() {
 
         if (!snapshot.exists()) {
           const seededData = normaliseAppData(latestDataRef.current)
-          const seededJson = JSON.stringify(seededData)
+          const seededJson = serialiseAppData(seededData)
           lastFirebaseJsonRef.current = seededJson
-          void set(appDataRef, seededData).catch((error) => {
-            console.warn('Waggulous Firebase seed write failed', error)
-          })
+          void set(appDataRef, firebaseWritableAppData(seededData)).catch(
+            (error) => {
+              console.warn('Waggulous Firebase seed write failed', error)
+            },
+          )
           return
         }
 
         const nextData = normaliseAppData(snapshot.val())
-        const nextJson = JSON.stringify(nextData)
+        const nextJson = serialiseAppData(nextData)
         lastFirebaseJsonRef.current = nextJson
 
         setData((current) =>
-          JSON.stringify(normaliseAppData(current)) === nextJson
+          serialiseAppData(normaliseAppData(current)) === nextJson
             ? current
             : nextData,
         )
@@ -1570,7 +1314,7 @@ function App() {
 
   useEffect(() => {
     const nextData = normaliseAppData(data)
-    const nextJson = JSON.stringify(nextData)
+    const nextJson = serialiseAppData(nextData)
     localStorage.setItem(storageKey, nextJson)
 
     if (
@@ -1582,7 +1326,7 @@ function App() {
     }
 
     const saveTimer = window.setTimeout(() => {
-      void set(appDataRef, nextData)
+      void set(appDataRef, firebaseWritableAppData(nextData))
         .then(() => {
           lastFirebaseJsonRef.current = nextJson
         })
@@ -1865,16 +1609,8 @@ function AuthPanel({
   onLogin: (id: string) => void
   onSignup: (name: string, email: string, password: string) => void
 }) {
-  const demoUsers = [...data.users].sort((a, b) => {
-    const roleOrder: Record<Role, number> = {
-      customer: 0,
-      owner: 1,
-      walker: 2,
-    }
-    return roleOrder[a.role] - roleOrder[b.role] || a.name.localeCompare(b.name)
-  })
-  const [email, setEmail] = useState('sam@example.com')
-  const [password, setPassword] = useState('demo')
+  const [email, setEmail] = useState('admin@waggulous.com')
+  const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [error, setError] = useState('')
 
@@ -1908,7 +1644,7 @@ function AuthPanel({
   return (
     <div className="auth-panel">
       <div className="section-heading compact">
-        <p className="eyebrow">Try the MVP</p>
+        <p className="eyebrow">Account access</p>
         <h2>{authMode === 'login' ? 'Login' : 'Create a customer account'}</h2>
       </div>
       <div className="segmented-control" aria-label="Authentication mode">
@@ -1944,7 +1680,7 @@ function AuthPanel({
             type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="sam@example.com"
+            placeholder="admin@waggulous.com"
           />
         </label>
         <label>
@@ -1953,7 +1689,7 @@ function AuthPanel({
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="demo"
+            placeholder="Your password"
           />
         </label>
         {error && <p className="form-error">{error}</p>}
@@ -1961,22 +1697,6 @@ function AuthPanel({
           {authMode === 'login' ? 'Login' : 'Create account'}
         </button>
       </form>
-      <div className="demo-logins">
-        <p>Development login shortcuts</p>
-        {demoUsers.map((user) => (
-          <button
-            key={user.id}
-            type="button"
-            onClick={() => {
-              setEmail(user.email)
-              setPassword(user.password)
-              onLogin(user.id)
-            }}
-          >
-            {user.name} · {user.role} · {user.email}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
@@ -2020,7 +1740,7 @@ function DashboardShell({
       {user.role === 'customer' && (
         <CustomerDashboard data={data} setData={setData} user={user} />
       )}
-      {user.role === 'owner' && (
+      {userIsAdmin(user) && (
         <OwnerDashboard data={data} setData={setData} user={user} />
       )}
       {user.role === 'walker' && (
@@ -2039,9 +1759,9 @@ function CustomerDashboard({
   setData: Dispatch<SetStateAction<AppData>>
   user: User
 }) {
-  const [tab, setTab] = useState<'overview' | 'pets' | 'book' | 'money' | 'chat'>(
-    'overview',
-  )
+  const [tab, setTab] = useState<
+    'overview' | 'pets' | 'book' | 'money' | 'chat' | 'account'
+  >('overview')
   const pets = data.pets.filter((pet) => pet.ownerId === user.id)
   const bookings = data.bookings
     .filter((booking) => booking.customerId === user.id)
@@ -2061,6 +1781,7 @@ function CustomerDashboard({
           ['book', 'Request'],
           ['money', 'Money'],
           ['chat', 'Messages'],
+          ['account', 'Account'],
         ]}
         onChange={(value) => setTab(value as typeof tab)}
       />
@@ -2119,6 +1840,10 @@ function CustomerDashboard({
       {tab === 'chat' && (
         <MessagesPanel data={data} setData={setData} user={user} />
       )}
+
+      {tab === 'account' && (
+        <AccountSecurityPanel data={data} setData={setData} user={user} />
+      )}
     </div>
   )
 }
@@ -2133,7 +1858,7 @@ function OwnerDashboard({
   user: User
 }) {
   const [tab, setTab] = useState<
-    'queue' | 'clients' | 'staff' | 'services' | 'theme' | 'chat'
+    'queue' | 'clients' | 'staff' | 'services' | 'theme' | 'chat' | 'account'
   >('queue')
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
   const ownerQueueBookings = data.bookings
@@ -2214,6 +1939,7 @@ function OwnerDashboard({
           ['services', 'Services'],
           ['theme', 'Theme'],
           ['chat', 'Messages'],
+          ['account', 'Account'],
         ]}
         onChange={(value) => setTab(value as typeof tab)}
       />
@@ -2221,7 +1947,7 @@ function OwnerDashboard({
       {tab === 'queue' && (
         <section className="workspace">
           <WorkspaceTitle
-            eyebrow="Owner console"
+            eyebrow="Admin console"
             title="Approve bookings and assign walkers."
           />
           <BookingTimeline data={data} setData={setData} />
@@ -2383,6 +2109,10 @@ function OwnerDashboard({
 
       {tab === 'chat' && (
         <MessagesPanel data={data} setData={setData} user={user} />
+      )}
+
+      {tab === 'account' && (
+        <AccountSecurityPanel data={data} setData={setData} user={user} />
       )}
     </div>
   )
@@ -2925,7 +2655,7 @@ function WalkerDashboard({
   user: User
 }) {
   const [tab, setTab] = useState<
-    'jobs' | 'clients' | 'profile' | 'holidays' | 'chat'
+    'jobs' | 'clients' | 'profile' | 'holidays' | 'chat' | 'account'
   >('jobs')
   const today = formatDateInputValue()
   const claimWindowEnd = addDaysInputValue(today, 7)
@@ -2936,12 +2666,14 @@ function WalkerDashboard({
         ['chat', 'Messages'],
         ['profile', 'Profile'],
         ['holidays', 'Holidays'],
+        ['account', 'Account'],
       ]
     : [
         ['jobs', 'Jobs'],
         ['chat', 'Messages'],
         ['profile', 'Profile'],
         ['holidays', 'Holidays'],
+        ['account', 'Account'],
       ]
   const assignedBookings = data.bookings
     .filter(
@@ -3221,6 +2953,10 @@ function WalkerDashboard({
       {tab === 'holidays' && (
         <StaffHolidayPanel data={data} setData={setData} user={user} />
       )}
+
+      {tab === 'account' && (
+        <AccountSecurityPanel data={data} setData={setData} user={user} />
+      )}
     </div>
   )
 }
@@ -3248,7 +2984,7 @@ function ClientBookingPanel({
   const [clientDraft, setClientDraft] = useState({
     name: '',
     email: '',
-    password: 'demo',
+    password: 'Temp123!',
     phone: '',
     address: '',
   })
@@ -3433,7 +3169,7 @@ function ClientBookingPanel({
     setClientDraft({
       name: '',
       email: '',
-      password: 'demo',
+      password: 'Temp123!',
       phone: '',
       address: '',
     })
@@ -3747,7 +3483,7 @@ function ClientBookingPanel({
         >
           Appointment
         </button>
-        {user.role === 'owner' && (
+        {userIsAdmin(user) && (
           <button
             className={panelTab === 'payment' ? 'is-active' : ''}
             type="button"
@@ -3846,32 +3582,29 @@ function ClientBookingPanel({
                   placeholder="Mabel"
                 />
               </label>
-              <label>
-                Species
-                <input
-                  value={clientPetDraft.species}
-                  onChange={(event) =>
-                    setClientPetDraft({
-                      ...clientPetDraft,
-                      species: event.target.value,
-                    })
-                  }
-                  placeholder="Dog"
-                />
-              </label>
-              <label>
-                Breed
-                <input
-                  value={clientPetDraft.breed}
-                  onChange={(event) =>
-                    setClientPetDraft({
-                      ...clientPetDraft,
-                      breed: event.target.value,
-                    })
-                  }
-                  placeholder="Cocker Spaniel"
-                />
-              </label>
+              <SpeciesBreedFields
+                data={data}
+                species={clientPetDraft.species}
+                breed={clientPetDraft.breed}
+                speciesListId="client-pet-species-options"
+                breedListId="client-pet-breed-options"
+                onSpeciesChange={(species) =>
+                  setClientPetDraft({
+                    ...clientPetDraft,
+                    species,
+                    breed:
+                      species === clientPetDraft.species
+                        ? clientPetDraft.breed
+                        : '',
+                  })
+                }
+                onBreedChange={(breed) =>
+                  setClientPetDraft({
+                    ...clientPetDraft,
+                    breed,
+                  })
+                }
+              />
               <label>
                 Age
                 <input
@@ -3972,26 +3705,23 @@ function ClientBookingPanel({
                   placeholder="Mabel"
                 />
               </label>
-              <label>
-                Species
-                <input
-                  value={petDraft.species}
-                  onChange={(event) =>
-                    setPetDraft({ ...petDraft, species: event.target.value })
-                  }
-                  placeholder="Dog"
-                />
-              </label>
-              <label>
-                Breed
-                <input
-                  value={petDraft.breed}
-                  onChange={(event) =>
-                    setPetDraft({ ...petDraft, breed: event.target.value })
-                  }
-                  placeholder="Cocker Spaniel"
-                />
-              </label>
+              <SpeciesBreedFields
+                data={data}
+                species={petDraft.species}
+                breed={petDraft.breed}
+                speciesListId="appointment-pet-species-options"
+                breedListId="appointment-pet-breed-options"
+                onSpeciesChange={(species) =>
+                  setPetDraft({
+                    ...petDraft,
+                    species,
+                    breed: species === petDraft.species ? petDraft.breed : '',
+                  })
+                }
+                onBreedChange={(breed) =>
+                  setPetDraft({ ...petDraft, breed })
+                }
+              />
               <label>
                 Age
                 <input
@@ -4033,7 +3763,7 @@ function ClientBookingPanel({
               ))}
             </select>
           </label>
-          {user.role === 'owner' && (
+          {userIsAdmin(user) && (
             <label>
               Staff assignment
               <select
@@ -4207,7 +3937,7 @@ function ClientBookingPanel({
         </form>
       )}
 
-      {panelTab === 'payment' && user.role === 'owner' && (
+      {panelTab === 'payment' && userIsAdmin(user) && (
         <section className="workspace nested-workspace">
           <WorkspaceTitle
             eyebrow="Client payments"
@@ -4317,7 +4047,7 @@ function StaffAdminPanel({
   const [draft, setDraft] = useState({
     name: '',
     email: '',
-    password: 'demo',
+    password: 'Temp123!',
     phone: '',
     address: '',
     avatar: '',
@@ -4371,7 +4101,7 @@ function StaffAdminPanel({
     setDraft({
       name: '',
       email: '',
-      password: 'demo',
+      password: 'Temp123!',
       phone: '',
       address: '',
       avatar: '',
@@ -4642,6 +4372,112 @@ function StaffAdminPanel({
   )
 }
 
+function AccountSecurityPanel({
+  data,
+  setData,
+  user,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+  user: User
+}) {
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [nextPassword, setNextPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  function changePassword(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    setSaved(false)
+
+    if (!currentPassword || !nextPassword || !confirmPassword) {
+      setError('Current password, new password, and confirmation are required.')
+      return
+    }
+
+    if (currentPassword !== user.password) {
+      setError('Current password does not match this account.')
+      return
+    }
+
+    if (nextPassword.length < 8) {
+      setError('New password must be at least 8 characters.')
+      return
+    }
+
+    if (nextPassword !== confirmPassword) {
+      setError('New password and confirmation must match.')
+      return
+    }
+
+    setData({
+      ...data,
+      users: data.users.map((candidate) =>
+        candidate.id === user.id
+          ? {
+              ...candidate,
+              password: nextPassword,
+            }
+          : candidate,
+      ),
+    })
+    setCurrentPassword('')
+    setNextPassword('')
+    setConfirmPassword('')
+    setSaved(true)
+  }
+
+  return (
+    <section className="workspace">
+      <WorkspaceTitle
+        eyebrow="Account security"
+        title="Change your password."
+      />
+      <div className="profile-summary">
+        <UserRound size={28} />
+        <div>
+          <h3>{user.name}</h3>
+          <p>{user.email}</p>
+          <p className="muted">{user.role}</p>
+        </div>
+      </div>
+      <form className="form-grid" onSubmit={changePassword}>
+        <label>
+          Current password
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+          />
+        </label>
+        <label>
+          New password
+          <input
+            type="password"
+            value={nextPassword}
+            onChange={(event) => setNextPassword(event.target.value)}
+          />
+        </label>
+        <label>
+          Confirm new password
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+          />
+        </label>
+        {error && <p className="form-error wide">{error}</p>}
+        {saved && <p className="form-success wide">Password changed.</p>}
+        <button className="button primary" type="submit">
+          Save password
+        </button>
+      </form>
+    </section>
+  )
+}
+
 function StaffProfilePanel({
   data,
   setData,
@@ -4656,7 +4492,6 @@ function StaffProfilePanel({
   const [draft, setDraft] = useState({
     name: user.name,
     email: user.email,
-    password: user.password,
     phone: user.phone ?? '',
     address: user.address ?? '',
     avatar: user.avatar ?? '',
@@ -4667,8 +4502,8 @@ function StaffProfilePanel({
     setError('')
     setSaved(false)
 
-    if (!draft.name.trim() || !draft.email.trim() || !draft.password.trim()) {
-      setError('Name, email, and password are required.')
+    if (!draft.name.trim() || !draft.email.trim()) {
+      setError('Name and email are required.')
       return
     }
 
@@ -4691,7 +4526,6 @@ function StaffProfilePanel({
               ...candidate,
               name: draft.name.trim(),
               email: draft.email.trim(),
-              password: draft.password,
               phone: draft.phone.trim(),
               address: draft.address.trim(),
               avatar: draft.avatar || undefined,
@@ -4756,15 +4590,6 @@ function StaffProfilePanel({
             value={draft.phone}
             onChange={(event) =>
               setDraft({ ...draft, phone: event.target.value })
-            }
-          />
-        </label>
-        <label>
-          Password
-          <input
-            value={draft.password}
-            onChange={(event) =>
-              setDraft({ ...draft, password: event.target.value })
             }
           />
         </label>
@@ -5173,26 +4998,21 @@ function PetsPanel({
             placeholder="Mabel"
           />
         </label>
-        <label>
-          Species
-          <input
-            value={draft.species}
-            onChange={(event) =>
-              setDraft({ ...draft, species: event.target.value })
-            }
-            placeholder="Dog"
-          />
-        </label>
-        <label>
-          Breed
-          <input
-            value={draft.breed}
-            onChange={(event) =>
-              setDraft({ ...draft, breed: event.target.value })
-            }
-            placeholder="Cocker Spaniel"
-          />
-        </label>
+        <SpeciesBreedFields
+          data={data}
+          species={draft.species}
+          breed={draft.breed}
+          speciesListId="customer-pet-species-options"
+          breedListId="customer-pet-breed-options"
+          onSpeciesChange={(species) =>
+            setDraft({
+              ...draft,
+              species,
+              breed: species === draft.species ? draft.breed : '',
+            })
+          }
+          onBreedChange={(breed) => setDraft({ ...draft, breed })}
+        />
         <label>
           Age
           <input
@@ -5838,6 +5658,54 @@ function ThemePanel({
 }) {
   const selectedTheme = getTheme(data.themeId)
   const petSpeciesColours = getPetSpeciesColourEntries(data)
+  const catalogueSpecies = getCatalogueSpeciesOptions(data)
+  const [speciesDraft, setSpeciesDraft] = useState('')
+  const [breedSpeciesDraft, setBreedSpeciesDraft] = useState('')
+  const [breedDraft, setBreedDraft] = useState('')
+  const requestedBreedSpecies = normaliseDisplayText(breedSpeciesDraft)
+  const selectedBreedSpecies =
+    (findCatalogueSpeciesKey(
+      data.petSpeciesBreedCatalogue,
+      requestedBreedSpecies,
+    ) ?? requestedBreedSpecies) ||
+    catalogueSpecies[0] ||
+    ''
+
+  function addSpecies(event: FormEvent) {
+    event.preventDefault()
+
+    const species = normaliseDisplayText(speciesDraft)
+    if (!species) return
+
+    setData((current) => ({
+      ...current,
+      petSpeciesBreedCatalogue: upsertCatalogueSpecies(
+        current.petSpeciesBreedCatalogue,
+        species,
+      ),
+    }))
+    setBreedSpeciesDraft(species)
+    setSpeciesDraft('')
+  }
+
+  function addBreed(event: FormEvent) {
+    event.preventDefault()
+
+    const species = selectedBreedSpecies || normaliseDisplayText(breedSpeciesDraft)
+    const breed = normaliseDisplayText(breedDraft)
+    if (!species || !breed) return
+
+    setData((current) => ({
+      ...current,
+      petSpeciesBreedCatalogue: addCatalogueBreed(
+        current.petSpeciesBreedCatalogue,
+        species,
+        breed,
+      ),
+    }))
+    setBreedSpeciesDraft(species)
+    setBreedDraft('')
+  }
 
   function updatePetSpeciesColour(speciesKey: string, colour: string) {
     if (!isHexColour(colour)) return
@@ -5932,6 +5800,117 @@ function ThemePanel({
           )
         })}
       </div>
+      <section className="pet-colour-settings pet-catalogue-settings">
+        <div className="section-heading compact">
+          <p className="eyebrow">Owner/admin defaults</p>
+          <h3>Species and breeds</h3>
+        </div>
+        <div className="catalogue-forms">
+          <form className="form-grid compact-grid" onSubmit={addSpecies}>
+            <label>
+              Species
+              <input
+                list="admin-species-catalogue-options"
+                value={speciesDraft}
+                onChange={(event) => setSpeciesDraft(event.target.value)}
+                placeholder="Dog"
+              />
+            </label>
+            <datalist id="admin-species-catalogue-options">
+              {catalogueSpecies.map((species) => (
+                <option key={species} value={species} />
+              ))}
+            </datalist>
+            <button className="button ghost" type="submit">
+              <Plus size={16} />
+              Add species
+            </button>
+          </form>
+          <form className="form-grid compact-grid" onSubmit={addBreed}>
+            <label>
+              Species
+              <input
+                list="admin-breed-species-options"
+                value={breedSpeciesDraft || selectedBreedSpecies}
+                onChange={(event) => setBreedSpeciesDraft(event.target.value)}
+                placeholder="Dog"
+              />
+            </label>
+            <datalist id="admin-breed-species-options">
+              {catalogueSpecies.map((species) => (
+                <option key={species} value={species} />
+              ))}
+            </datalist>
+            <label>
+              Breed
+              <input
+                value={breedDraft}
+                onChange={(event) => setBreedDraft(event.target.value)}
+                placeholder="Cocker Spaniel"
+              />
+            </label>
+            <button className="button ghost" type="submit">
+              <Plus size={16} />
+              Add breed
+            </button>
+          </form>
+        </div>
+        <div className="species-catalogue-list">
+          {catalogueSpecies.length === 0 && (
+            <p className="muted">No species configured yet.</p>
+          )}
+          {catalogueSpecies.map((species) => (
+            <article className="species-catalogue-row" key={species}>
+              <div>
+                <h4>{species}</h4>
+                <div className="breed-chip-list">
+                  {(data.petSpeciesBreedCatalogue[species] ?? []).length === 0 && (
+                    <span className="muted">No breeds yet.</span>
+                  )}
+                  {(data.petSpeciesBreedCatalogue[species] ?? []).map((breed) => (
+                    <span className="breed-chip" key={breed}>
+                      {breed}
+                      <button
+                        className="icon-button"
+                        type="button"
+                        aria-label={`Remove ${breed} breed`}
+                        onClick={() =>
+                          setData((current) => ({
+                            ...current,
+                            petSpeciesBreedCatalogue: removeCatalogueBreed(
+                              current.petSpeciesBreedCatalogue,
+                              species,
+                              breed,
+                            ),
+                          }))
+                        }
+                      >
+                        <X size={14} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                aria-label={`Remove ${species} species`}
+                onClick={() =>
+                  setData((current) => ({
+                    ...current,
+                    petSpeciesBreedCatalogue: removeCatalogueSpecies(
+                      current.petSpeciesBreedCatalogue,
+                      species,
+                    ),
+                  }))
+                }
+              >
+                <X size={16} />
+              </button>
+            </article>
+          ))}
+        </div>
+      </section>
       <section className="pet-colour-settings">
         <div className="section-heading compact">
           <p className="eyebrow">Owner/admin defaults</p>
@@ -6620,7 +6599,7 @@ function PaymentControls({
       return
     }
 
-    const isOwner = user.role === 'owner'
+    const isOwner = userIsAdmin(user)
 
     if (!isOwner && paymentAmount > outstanding) {
       setError(`Amount cannot exceed outstanding ${formatMoney(outstanding)}.`)
@@ -6701,7 +6680,7 @@ function PaymentControls({
             <input
               type="number"
               min="0"
-              max={user.role === 'owner' ? undefined : outstanding}
+              max={userIsAdmin(user) ? undefined : outstanding}
               step="0.5"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
@@ -6724,7 +6703,7 @@ function PaymentControls({
           </label>
           <button className="button primary" type="submit">
             <CreditCard size={16} />
-            {user.role === 'owner' ? 'Record payment' : 'Mark received'}
+            {userIsAdmin(user) ? 'Record payment' : 'Mark received'}
           </button>
           {error && <p className="form-error wide">{error}</p>}
         </form>

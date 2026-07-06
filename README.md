@@ -6,11 +6,11 @@ Mobile-first PWA MVP for a dog walking and pet sitting business.
 
 - Marketing landing page with generated Waggulous hero image.
 - Installable PWA metadata and service worker app-shell caching.
-- Local demo authentication with customer, owner, and walker roles.
+- Firebase-backed authentication data with customer, admin, and walker roles.
 - Customer pet profiles with named pets, details, care notes, and uploaded pictures.
 - Service request flow for walking or pet sitting with owner-configured available slots, recurring slot requests, visible prices, request confirmation, and current request/assigned appointment lists.
 - Customer money view showing owed totals and historical transactions only.
-- Owner console for approving or declining bookings, assigning walkers, reassigning staff appointments, confirming staff-recorded payments, deciding cancellation chargeability, adding verbal client bookings, maintaining services/prices with configurable weekly slots and multi-pet pricing, choosing the site colour theme, and registering staff.
+- Admin console for approving or declining bookings, assigning walkers, reassigning staff appointments, confirming staff-recorded payments, deciding cancellation chargeability, adding verbal client bookings, maintaining services/prices with configurable weekly slots and multi-pet pricing, controlling pet species/breed suggestions, choosing the site colour theme, and registering staff.
 - Staff records with name, address, phone, email, avatar, login credentials, and owner-controlled self-assignment permission.
 - Staff workspace for authorised jobs, approved-staff verbal client booking, staff-recorded pending payments, next-7-day unassigned request and appointment claiming with approval confirmation, profile maintenance, avatar updates, and all-day or timed start/end availability management.
 - Booking-linked messaging between roles.
@@ -19,13 +19,12 @@ Mobile-first PWA MVP for a dog walking and pet sitting business.
 
 Payment account details are deliberately not stored because payments are expected to be handled by an outsourced service.
 
-## Demo accounts
+## Initial account
 
-All demo passwords are `demo`.
+- Admin: `admin@waggulous.com`
+- Initial password: `Admin123!`
 
-- Customer: `sam@example.com`
-- Owner: `owner@waggulous.local`
-- Walker: `walker@waggulous.local`
+Use the Account tab after login to change the password.
 
 ## Commands
 

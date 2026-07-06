@@ -1,9 +1,13 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
-async function loginWithEmail(page: Page, email: string) {
+async function loginWithEmail(
+  page: Page,
+  email: string,
+  password = email === 'admin@waggulous.com' ? 'Admin123!' : 'Test123!',
+) {
   await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Password').fill('demo')
+  await page.getByLabel('Password').fill(password)
   await page.locator('.auth-panel form').getByRole('button', { name: 'Login' }).click()
 }
 
@@ -27,15 +31,613 @@ function dateInputForNextWeekday(targetDay: number) {
   return `${year}-${month}-${day}`
 }
 
+async function seedWorkflowData(page: Page) {
+  const todayDate = dateInputFromToday(0)
+  await page.waitForFunction(() =>
+    Boolean(localStorage.getItem('waggulous-mvp-data')),
+  )
+  await page.evaluate((today) => {
+    function addDaysInputValue(startDate: string, days: number) {
+      const date = new Date(`${startDate}T00:00:00`)
+      date.setDate(date.getDate() + days)
+      const year = date.getFullYear()
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const day = String(date.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
+    }
+
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    localStorage.setItem(
+      'waggulous-mvp-data',
+      JSON.stringify({
+        ...data,
+        petSpeciesBreedCatalogue: {
+          Bird: ['Cockatiel'],
+          Cat: ['Domestic shorthair', 'Maine Coon'],
+          Dog: [
+            'Beagle',
+            'Border Terrier',
+            'Cocker Spaniel',
+            'Labrador',
+            'Shih Tzu',
+            'Whippet',
+          ],
+          Fish: ['Goldfish'],
+          Hamster: ['Syrian hamster'],
+          Rabbit: ['Mini Lop'],
+          Turtle: ['Musk turtle'],
+        },
+        users: [
+          {
+            id: 'u-admin',
+            name: 'Waggulous Admin',
+            email: 'admin@waggulous.com',
+            password: 'Admin123!',
+            role: 'admin',
+            phone: '',
+            address: '',
+          },
+          {
+            id: 'u-walker',
+            name: 'Alex Walker',
+            email: 'walker@waggulous.local',
+            password: 'Test123!',
+            role: 'walker',
+            phone: '07700 900222',
+            address: '14 Park View, Bristol',
+            canSelfAssign: true,
+            holidays: [
+              {
+                id: 'h-alex-1',
+                startDate: '2026-07-15',
+                endDate: '2026-07-18',
+                allDay: true,
+                reason: 'Family break',
+                status: 'active',
+              },
+            ],
+          },
+          {
+            id: 'u-customer',
+            name: 'Sam Taylor',
+            email: 'sam@example.com',
+            password: 'Test123!',
+            role: 'customer',
+            phone: '07700 900101',
+            address: '12 River Walk, Bristol',
+          },
+          {
+            id: 'u-maya',
+            name: 'Maya Chen',
+            email: 'maya@waggulous.local',
+            password: 'Test123!',
+            role: 'walker',
+            phone: '07700 900333',
+            address: '8 Orchard Terrace, Bristol',
+            canSelfAssign: true,
+          },
+          {
+            id: 'u-priya',
+            name: 'Priya Shah',
+            email: 'priya@waggulous.local',
+            password: 'Test123!',
+            role: 'walker',
+            phone: '07700 900444',
+            address: '19 Willow Road, Bristol',
+            canSelfAssign: true,
+          },
+          {
+            id: 'u-tom',
+            name: 'Tom Evans',
+            email: 'tom@waggulous.local',
+            password: 'Test123!',
+            role: 'walker',
+            phone: '07700 900555',
+            address: '3 Clifton Mews, Bristol',
+            canSelfAssign: false,
+          },
+          {
+            id: 'u-eliza',
+            name: 'Eliza Moore',
+            email: 'eliza.moore@example.com',
+            password: 'Test123!',
+            role: 'customer',
+            phone: '07700 910101',
+            address: '24 Sycamore Avenue, Bristol',
+          },
+          {
+            id: 'u-omar',
+            name: 'Omar Khan',
+            email: 'omar.khan@example.com',
+            password: 'Test123!',
+            role: 'customer',
+            phone: '07700 910202',
+            address: '7 Harbour View, Bristol',
+          },
+          {
+            id: 'u-grace',
+            name: 'Grace Bell',
+            email: 'grace.bell@example.com',
+            password: 'Test123!',
+            role: 'customer',
+            phone: '07700 910303',
+            address: '41 Meadowbank Road, Bristol',
+          },
+          {
+            id: 'u-theo',
+            name: 'Theo Harris',
+            email: 'theo.harris@example.com',
+            password: 'Test123!',
+            role: 'customer',
+            phone: '07700 910404',
+            address: '16 Kingsdown Parade, Bristol',
+          },
+        ],
+        services: [
+          {
+            id: 's-walk-30',
+            name: '30 minute walk',
+            type: 'walking',
+            description: 'Local solo or small-group walk with clear care updates.',
+            duration: '30 min',
+            price: 14,
+            active: true,
+          },
+          {
+            id: 's-walk-60',
+            name: '60 minute adventure walk',
+            type: 'walking',
+            description: 'Longer route for energetic dogs with photo updates.',
+            duration: '60 min',
+            price: 22,
+            active: true,
+          },
+          {
+            id: 's-pop-in',
+            name: 'Pet sitting pop-in',
+            type: 'sitting',
+            description: 'Feeding, water, comfort checks, litter or garden break.',
+            duration: '25 min',
+            price: 12,
+            active: true,
+          },
+          {
+            id: 's-evening',
+            name: 'Evening sit',
+            type: 'sitting',
+            description: 'Calm in-home companionship for dinner and bedtime routines.',
+            duration: '2 hours',
+            price: 38,
+            active: true,
+          },
+        ],
+        serviceSlots: [
+          {
+            id: 'slot-walk-early',
+            serviceId: 's-walk-30',
+            label: 'Early morning walk',
+            days: [1, 2, 3, 4, 5],
+            startTime: '07:00',
+            endTime: '08:00',
+            capacity: 4,
+            active: true,
+          },
+          {
+            id: 'slot-walk-lunch',
+            serviceId: 's-walk-30',
+            label: 'Lunchtime walk',
+            days: [2, 4],
+            startTime: '12:00',
+            endTime: '13:00',
+            capacity: 4,
+            active: true,
+          },
+          {
+            id: 'slot-walk-evening',
+            serviceId: 's-walk-30',
+            label: 'Evening walk',
+            days: [1, 2, 3, 4, 5],
+            startTime: '18:00',
+            endTime: '19:00',
+            capacity: 4,
+            active: true,
+          },
+          {
+            id: 'slot-pop-in-daily',
+            serviceId: 's-pop-in',
+            label: 'Pet sitting pop-in window',
+            days: [0, 1, 2, 3, 4, 5, 6],
+            startTime: '10:00',
+            endTime: '12:00',
+            capacity: 3,
+            active: true,
+          },
+        ],
+        pets: [
+          {
+            id: 'p-mabel',
+            ownerId: 'u-customer',
+            name: 'Mabel',
+            species: 'Dog',
+            breed: 'Cocker Spaniel',
+            age: '4',
+            notes: 'Loves woodland routes, nervous around scooters.',
+          },
+          {
+            id: 'p-pip',
+            ownerId: 'u-customer',
+            name: 'Pip',
+            species: 'Cat',
+            breed: 'Domestic shorthair',
+            age: '8',
+            notes: 'Needs evening feeding and a litter tray check.',
+          },
+          {
+            id: 'p-rufus',
+            ownerId: 'u-eliza',
+            name: 'Rufus',
+            species: 'Dog',
+            breed: 'Border Terrier',
+            age: '6',
+            notes: 'Can be stubborn near the bakery. Treats in the porch cupboard.',
+          },
+          {
+            id: 'p-tilly',
+            ownerId: 'u-eliza',
+            name: 'Tilly',
+            species: 'Cat',
+            breed: 'Maine Coon',
+            age: '5',
+            notes: 'Brush briefly after feeding and keep the kitchen window closed.',
+          },
+          {
+            id: 'p-nori',
+            ownerId: 'u-omar',
+            name: 'Nori',
+            species: 'Bird',
+            breed: 'Cockatiel',
+            age: '3',
+            notes: 'Fresh water, seed top-up, and ten minutes of quiet company.',
+          },
+          {
+            id: 'p-biscuit',
+            ownerId: 'u-omar',
+            name: 'Biscuit',
+            species: 'Rabbit',
+            breed: 'Mini Lop',
+            age: '2',
+            notes: 'Check hay rack and make sure the garden run latch is clipped.',
+          },
+          {
+            id: 'p-luna',
+            ownerId: 'u-grace',
+            name: 'Luna',
+            species: 'Dog',
+            breed: 'Whippet',
+            age: '4',
+            notes: 'Nervous around skateboards. Use the yellow lead for walks.',
+          },
+          {
+            id: 'p-miso',
+            ownerId: 'u-grace',
+            name: 'Miso',
+            species: 'Dog',
+            breed: 'Shih Tzu',
+            age: '9',
+            notes: 'Shorter route only and wipe paws before coming inside.',
+          },
+          {
+            id: 'p-goldie',
+            ownerId: 'u-theo',
+            name: 'Goldie',
+            species: 'Fish',
+            breed: 'Goldfish',
+            age: '1',
+            notes: 'One small pinch of food. Do not top up the tank.',
+          },
+          {
+            id: 'p-shelly',
+            ownerId: 'u-theo',
+            name: 'Shelly',
+            species: 'Turtle',
+            breed: 'Musk turtle',
+            age: '7',
+            notes: 'Check basking lamp and remove any leftover greens.',
+          },
+          {
+            id: 'p-peanut',
+            ownerId: 'u-theo',
+            name: 'Peanut',
+            species: 'Hamster',
+            breed: 'Syrian hamster',
+            age: '1',
+            notes: 'Evening check only. Food scoop is beside the enclosure.',
+          },
+        ],
+        recurringBookings: [],
+        bookings: [
+          {
+            id: 'b-1',
+            customerId: 'u-customer',
+            petIds: ['p-mabel'],
+            serviceId: 's-walk-30',
+            date: today,
+            time: '09:30',
+            notes: 'Please use the blue harness.',
+            status: 'approved',
+            price: 14,
+            walkerId: 'u-walker',
+          },
+          {
+            id: 'b-demo-1',
+            customerId: 'u-customer',
+            petIds: ['p-pip'],
+            serviceId: 's-pop-in',
+            slotId: 'slot-pop-in-daily',
+            date: today,
+            time: '10:30',
+            endTime: '10:55',
+            notes: 'Pip needs food, water, and litter checked before lunch.',
+            status: 'approved',
+            price: 12,
+            walkerId: 'u-maya',
+          },
+          {
+            id: 'b-demo-2',
+            customerId: 'u-eliza',
+            petIds: ['p-rufus'],
+            serviceId: 's-walk-30',
+            slotId: 'slot-walk-early',
+            date: addDaysInputValue(today, 1),
+            time: '07:30',
+            endTime: '08:00',
+            notes: 'Rufus is best walked before the school run gets busy.',
+            status: 'approved',
+            price: 14,
+            walkerId: 'u-walker',
+          },
+          {
+            id: 'b-demo-3',
+            customerId: 'u-omar',
+            petIds: ['p-nori', 'p-biscuit'],
+            serviceId: 's-pop-in',
+            slotId: 'slot-pop-in-daily',
+            date: addDaysInputValue(today, 1),
+            time: '10:00',
+            endTime: '10:35',
+            notes: 'Quiet visit for Nori, then check Biscuit has hay and water.',
+            status: 'approved',
+            price: 12,
+            walkerId: 'u-priya',
+          },
+          {
+            id: 'b-demo-4',
+            customerId: 'u-grace',
+            petIds: ['p-luna', 'p-miso'],
+            serviceId: 's-walk-60',
+            slotId: 'slot-walk-lunch',
+            date: addDaysInputValue(today, 1),
+            time: '12:30',
+            endTime: '13:30',
+            notes: 'Keep Miso to the flatter route and give Luna space near roads.',
+            status: 'approved',
+            price: 22,
+            walkerId: 'u-maya',
+          },
+          {
+            id: 'b-demo-5',
+            customerId: 'u-theo',
+            petIds: ['p-goldie', 'p-shelly', 'p-peanut'],
+            serviceId: 's-pop-in',
+            slotId: 'slot-pop-in-daily',
+            date: addDaysInputValue(today, 2),
+            time: '09:15',
+            endTime: '09:45',
+            notes: 'Small pet care round: fish feed, turtle lamp, hamster food.',
+            status: 'approved',
+            price: 12,
+            walkerId: 'u-tom',
+          },
+          {
+            id: 'b-demo-6',
+            customerId: 'u-eliza',
+            petIds: ['p-rufus', 'p-tilly'],
+            serviceId: 's-pop-in',
+            date: addDaysInputValue(today, 2),
+            time: '14:00',
+            endTime: '14:30',
+            notes: 'Requested afternoon check while Eliza is at a work event.',
+            status: 'requested',
+            price: 12,
+          },
+          {
+            id: 'b-demo-7',
+            customerId: 'u-eliza',
+            petIds: ['p-rufus'],
+            serviceId: 's-walk-30',
+            slotId: 'slot-walk-early',
+            date: addDaysInputValue(today, 3),
+            time: '08:00',
+            endTime: '08:30',
+            notes: 'Rufus can join the early neighbourhood loop.',
+            status: 'approved',
+            price: 14,
+            walkerId: 'u-priya',
+          },
+          {
+            id: 'b-demo-8',
+            customerId: 'u-grace',
+            petIds: ['p-luna'],
+            serviceId: 's-walk-30',
+            date: addDaysInputValue(today, 3),
+            time: '11:30',
+            endTime: '12:00',
+            notes: 'Grace asked whether Luna can have a quieter mid-morning walk.',
+            status: 'requested',
+            price: 14,
+          },
+          {
+            id: 'b-demo-9',
+            customerId: 'u-customer',
+            petIds: ['p-pip'],
+            serviceId: 's-evening',
+            date: addDaysInputValue(today, 3),
+            time: '18:30',
+            endTime: '20:30',
+            notes: 'Evening companionship and feeding while Sam is away.',
+            status: 'approved',
+            price: 38,
+            walkerId: 'u-priya',
+          },
+          {
+            id: 'b-demo-10',
+            customerId: 'u-grace',
+            petIds: ['p-luna', 'p-miso'],
+            serviceId: 's-walk-30',
+            slotId: 'slot-walk-evening',
+            date: addDaysInputValue(today, 4),
+            time: '18:00',
+            endTime: '18:45',
+            notes: 'Evening loop after the pavement cools down.',
+            status: 'approved',
+            price: 14,
+            walkerId: 'u-walker',
+          },
+          {
+            id: 'b-2',
+            customerId: 'u-customer',
+            petIds: ['p-pip'],
+            serviceId: 's-pop-in',
+            date: '2026-06-18',
+            time: '18:00',
+            notes: 'Food is in the utility room.',
+            status: 'completed',
+            price: 12,
+            walkerId: 'u-walker',
+            pickedUpAt: '2026-06-18T18:02:00.000Z',
+            returnedAt: '2026-06-18T18:26:00.000Z',
+          },
+        ],
+        transactions: [
+          {
+            id: 't-1',
+            customerId: 'u-customer',
+            bookingId: 'b-1',
+            date: today,
+            description: 'Approved 30 minute walk for Mabel',
+            amount: 14,
+            status: 'owed',
+          },
+          {
+            id: 't-2',
+            customerId: 'u-customer',
+            bookingId: 'b-2',
+            date: '2026-06-18',
+            description: 'Paid pet sitting pop-in for Pip',
+            amount: 12,
+            status: 'paid',
+          },
+        ],
+        messages: [
+          {
+            id: 'm-1',
+            bookingId: 'b-1',
+            senderId: 'u-admin',
+            recipientId: 'u-customer',
+            body: 'Alex is confirmed for Monday morning. We will log pickup and return in the app.',
+            createdAt: '2026-06-26T14:30:00.000Z',
+          },
+        ],
+      }),
+    )
+  }, todayDate)
+  await page.reload()
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await page.evaluate(() => {
     localStorage.clear()
   })
   await page.reload()
+  await seedWorkflowData(page)
 })
 
-test('mobile MVP journey covers customer, owner, and walker workspaces', async ({
+test('fresh store starts with admin only and allows password changes', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    localStorage.clear()
+  })
+  await page.reload()
+  await page.waitForFunction(() =>
+    Boolean(localStorage.getItem('waggulous-mvp-data')),
+  )
+
+  const cleanData = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return {
+      bookings: data.bookings?.length,
+      messages: data.messages?.length,
+      pets: data.pets?.length,
+      petSpeciesBreedCatalogue: data.petSpeciesBreedCatalogue ?? {},
+      services: data.services?.length,
+      serviceSlots: data.serviceSlots?.length,
+      transactions: data.transactions?.length,
+      users: data.users?.map(
+        (user: { email: string; password: string; role: string }) => ({
+          email: user.email,
+          password: user.password,
+          role: user.role,
+        }),
+      ),
+    }
+  })
+  expect(cleanData).toEqual({
+    bookings: 0,
+    messages: 0,
+    pets: 0,
+    petSpeciesBreedCatalogue: {},
+    services: 0,
+    serviceSlots: 0,
+    transactions: 0,
+    users: [
+      {
+        email: 'admin@waggulous.com',
+        password: 'Admin123!',
+        role: 'admin',
+      },
+    ],
+  })
+  await expect(
+    page.getByRole('button', { name: /admin@waggulous.com/i }),
+  ).toHaveCount(0)
+
+  await loginWithEmail(page, 'admin@waggulous.com')
+  await expect(page.getByText(/Waggulous Admin · admin/i)).toBeVisible()
+  await page.getByRole('button', { name: 'Account' }).click()
+  await page.getByLabel('Current password').fill('Wrong123!')
+  await page.getByLabel('New password', { exact: true }).fill('Admin456!')
+  await page.getByLabel('Confirm new password').fill('Admin456!')
+  await page.getByRole('button', { name: /save password/i }).click()
+  await expect(page.getByText(/Current password does not match/i)).toBeVisible()
+
+  await page.getByLabel('Current password').fill('Admin123!')
+  await page.getByRole('button', { name: /save password/i }).click()
+  await expect(page.getByText('Password changed.')).toBeVisible()
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'admin@waggulous.com', 'Admin123!')
+  await expect(
+    page.getByText('Those details do not match a Waggulous account.'),
+  ).toBeVisible()
+  await loginWithEmail(page, 'admin@waggulous.com', 'Admin456!')
+  await expect(
+    page.getByRole('heading', { name: /approve bookings and assign walkers/i }),
+  ).toBeVisible()
+})
+
+test('mobile MVP journey covers customer, admin, and walker workspaces', async ({
   page,
 }) => {
   test.setTimeout(60_000)
@@ -44,17 +646,17 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   const claimableDate = dateInputFromToday(4)
 
   await expect(page.getByRole('heading', { name: /trusted local care/i })).toBeVisible()
-  await expect(page.getByText('Owner console')).toHaveCount(0)
+  await expect(page.getByText('Admin console')).toHaveCount(0)
   await expect(page.getByText('Walker workflow')).toHaveCount(0)
   await expect(
-    page.getByRole('button', { name: /owner@waggulous.local/i }),
-  ).toBeVisible()
+    page.getByRole('button', { name: /admin@waggulous.com/i }),
+  ).toHaveCount(0)
   await expect(
     page.getByRole('button', { name: /walker@waggulous.local/i }),
-  ).toBeVisible()
+  ).toHaveCount(0)
   await page.screenshot({ path: 'test-results/mobile-landing.png' })
 
-  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await loginWithEmail(page, 'sam@example.com')
   await expect(
     page.getByRole('heading', { name: /your pets, bookings, and balance/i }),
   ).toBeVisible()
@@ -87,7 +689,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   await expect(page.getByText(/payments are handled by an outsourced service/i)).toBeVisible()
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   await expect(
     page.getByRole('heading', { name: /approve bookings and assign walkers/i }),
   ).toBeVisible()
@@ -175,7 +777,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   ).toBeVisible()
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'jordan@waggulous.local')
+  await loginWithEmail(page, 'jordan@waggulous.local', 'Temp123!')
   await expect(page.getByText('No appointments assigned.')).toBeVisible()
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
@@ -229,13 +831,13 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   ).toContainText('approved')
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   await page.getByRole('button', { name: /sign out/i }).click()
-  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await loginWithEmail(page, 'sam@example.com')
   await page.getByRole('button', { name: 'Money' }).click()
   await expect(page.getByText('£0.00')).toBeVisible()
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   await page.getByRole('button', { name: 'Staff' }).click()
   await page
     .locator('article')
@@ -258,7 +860,7 @@ test('mobile MVP journey covers customer, owner, and walker workspaces', async (
   ).toHaveCount(0)
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'jordan@waggulous.local')
+  await loginWithEmail(page, 'jordan@waggulous.local', 'Temp123!')
   await page.getByRole('button', { name: 'Profile' }).click()
   await page.getByLabel('Phone').fill('07700 900444')
   await page.getByRole('button', { name: /save profile/i }).click()
@@ -298,7 +900,7 @@ test('owner services layout keeps slots readable on laptop screens', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   await page.getByRole('button', { name: 'Services' }).click()
 
   const dashboardWidth = await page.locator('.dashboard-grid').evaluate((grid) => {
@@ -343,7 +945,7 @@ test('owner services layout keeps slots readable on laptop screens', async ({
 
 test('owner controls site-wide pet type colours', async ({ page }) => {
   await page.setViewportSize({ width: 1366, height: 768 })
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
 
   await page.getByRole('button', { name: 'Theme' }).click()
   await page.locator('input[aria-label="Dog colour"]').fill('#0055aa')
@@ -366,7 +968,7 @@ test('owner controls site-wide pet type colours', async ({ page }) => {
   expect(timelineDogColour).toBe('#0055aa')
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await loginWithEmail(page, 'sam@example.com')
   await expect(page.getByRole('button', { name: 'Theme' })).toHaveCount(0)
   await page.getByRole('button', { name: 'Pets' }).click()
 
@@ -379,6 +981,58 @@ test('owner controls site-wide pet type colours', async ({ page }) => {
       getComputedStyle(icon).getPropertyValue('--pet-species-colour').trim(),
     )
   expect(customerPetColour).toBe('#0055aa')
+})
+
+test('owner controls species and breed suggestions for pet entry', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 768 })
+  await loginWithEmail(page, 'admin@waggulous.com')
+
+  await page.getByRole('button', { name: 'Theme' }).click()
+  const catalogue = page.locator('.pet-catalogue-settings')
+  const speciesForm = catalogue.locator('form').first()
+  const breedForm = catalogue.locator('form').nth(1)
+
+  await speciesForm.getByLabel('Species').fill('Ferret')
+  await speciesForm.getByRole('button', { name: /add species/i }).click()
+  await expect(
+    catalogue.locator('.species-catalogue-row').filter({ hasText: 'Ferret' }),
+  ).toBeVisible()
+
+  await breedForm.getByLabel('Species').fill('Ferret')
+  await breedForm.getByLabel('Breed').fill('Polecat')
+  await breedForm.getByRole('button', { name: /add breed/i }).click()
+  await breedForm.getByLabel('Breed').fill('Angora')
+  await breedForm.getByRole('button', { name: /add breed/i }).click()
+
+  const savedCatalogue = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.petSpeciesBreedCatalogue?.Ferret
+  })
+  expect(savedCatalogue).toEqual(['Angora', 'Polecat'])
+
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await expect(
+    page.locator('#client-pet-species-options option[value="Ferret"]'),
+  ).toHaveCount(1)
+
+  await page.locator('input[list="client-pet-species-options"]').fill('Ferret')
+  const ferretBreeds = await page
+    .locator('#client-pet-breed-options option')
+    .evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value),
+    )
+  expect(ferretBreeds).toEqual(['Angora', 'Polecat'])
+
+  await page.locator('input[list="client-pet-species-options"]').fill('Dog')
+  const dogBreeds = await page
+    .locator('#client-pet-breed-options option')
+    .evaluateAll((options) =>
+      options.map((option) => (option as HTMLOptionElement).value),
+    )
+  expect(dogBreeds).toContain('Labrador')
+  expect(dogBreeds).not.toContain('Polecat')
 })
 
 test('owner bookings open in an interactive staff timeline', async ({ page }) => {
@@ -420,7 +1074,7 @@ test('owner bookings open in an interactive staff timeline', async ({ page }) =>
     )
   }, todayDate)
   await page.reload()
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
 
   const timeline = page.locator('.timeline-panel')
   await expect(timeline).toContainText('5 bookings across 1 day')
@@ -621,7 +1275,7 @@ test('recurring slot bookings can be halted and individual slots cancelled', asy
   await page.setViewportSize({ width: 390, height: 844 })
   const nextMonday = dateInputForNextWeekday(1)
 
-  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await loginWithEmail(page, 'sam@example.com')
   await page.getByRole('button', { name: 'Request' }).click()
   await page.getByLabel('Service').selectOption('s-walk-30')
   await page.getByRole('checkbox', { name: 'Mabel' }).check()
@@ -686,7 +1340,7 @@ test('recurring slot bookings can be halted and individual slots cancelled', asy
   expect(halted.cancelledCount).toBeGreaterThan(1)
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   await page.getByRole('button', { name: /not chargeable/i }).first().click()
   const chargeDecision = await page.evaluate(() => {
     const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
@@ -748,7 +1402,7 @@ test('money matures completed services and allows client credit', async ({
   }, walkDates)
   await page.reload()
 
-  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await loginWithEmail(page, 'sam@example.com')
   await page.getByRole('button', { name: 'Money' }).click()
   await expect(
     page.getByRole('heading', { name: /owed monies/i }),
@@ -756,7 +1410,7 @@ test('money matures completed services and allows client credit', async ({
   await expect(page.getByText('£42.00')).toBeVisible()
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByRole('button', { name: 'Payments' }).click()
   await page
@@ -870,7 +1524,7 @@ test('multi-household booking and walker exception workflows stay coherent', asy
       id: 'u-relief',
       name: 'Relief Walker',
       email: 'relief@waggulous.local',
-      password: 'demo',
+      password: 'Test123!',
       role: 'walker',
       phone: '07700 900555',
       address: '4 Spare Lead Lane',
@@ -881,7 +1535,7 @@ test('multi-household booking and walker exception workflows stay coherent', asy
         id,
         name,
         email,
-        password: 'demo',
+        password: 'Test123!',
         role: 'customer',
       }),
     )
@@ -940,7 +1594,7 @@ test('multi-household booking and walker exception workflows stay coherent', asy
   })
   expect(seededCounts).toEqual({ households: 12, requested: 12 })
 
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   for (const [petName, clientName] of [
     ['Bracken', 'Ava Green'],
     ['Milo', 'Ben Clarke'],
@@ -991,7 +1645,7 @@ test('multi-household booking and walker exception workflows stay coherent', asy
   await expect(page.getByText(/cannot safely take all five early dogs/i)).toBeVisible()
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   await page.getByRole('button', { name: 'Messages' }).click()
   await expect(page.getByText(/split the session/i)).toBeVisible()
 
@@ -1064,7 +1718,7 @@ test('recurring requests support custom lengths and one-click approval', async (
 }) => {
   const nextMonday = dateInputForNextWeekday(1)
 
-  await page.getByRole('button', { name: /sam@example.com/i }).click()
+  await loginWithEmail(page, 'sam@example.com')
   await page.getByRole('button', { name: 'Request' }).click()
   await page.getByLabel('Service').selectOption('s-walk-30')
   await page.getByRole('checkbox', { name: 'Mabel' }).check()
@@ -1104,7 +1758,7 @@ test('recurring requests support custom lengths and one-click approval', async (
   })
 
   await page.getByRole('button', { name: /sign out/i }).click()
-  await loginWithEmail(page, 'owner@waggulous.local')
+  await loginWithEmail(page, 'admin@waggulous.com')
   const recurringRequest = page.locator('article').filter({
     hasText: 'Recurring request',
   })
