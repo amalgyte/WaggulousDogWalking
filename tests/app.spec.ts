@@ -713,6 +713,13 @@ test('walker jobs are filtered by date with completed jobs separated', async ({
 test('admin confirms cash received by staff into the company account', async ({
   page,
 }) => {
+  const todayLabel = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(`${dateInputFromToday(0)}T12:00:00`))
+  const acknowledgementMessage = `We have received your cash payment of £14.00 for 30 minute walk on ${todayLabel}. Thank you.`
+
   await loginWithEmail(page, 'walker@waggulous.local')
 
   const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
@@ -743,26 +750,37 @@ test('admin confirms cash received by staff into the company account', async ({
 
   const paymentState = await page.evaluate(() => {
     const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
-    return data.transactions
-      .filter(
-        (transaction: { bookingId?: string; type?: string }) =>
-          transaction.bookingId === 'b-1' && transaction.type === 'payment',
-      )
-      .map(
-        (transaction: {
-          status: string
-          method?: string
-          recordedById?: string
-          confirmedById?: string
-        }) => ({
-          status: transaction.status,
-          method: transaction.method,
-          recordedById: transaction.recordedById,
-          confirmedById: transaction.confirmedById,
-        }),
-      )
+    return {
+      messages: data.messages
+        .filter(
+          (message: { bookingId?: string; recipientId: string }) =>
+            message.bookingId === 'b-1' && message.recipientId === 'u-customer',
+        )
+        .map((message: { body: string; senderId: string }) => ({
+          body: message.body,
+          senderId: message.senderId,
+        })),
+      payments: data.transactions
+        .filter(
+          (transaction: { bookingId?: string; type?: string }) =>
+            transaction.bookingId === 'b-1' && transaction.type === 'payment',
+        )
+        .map(
+          (transaction: {
+            status: string
+            method?: string
+            recordedById?: string
+            confirmedById?: string
+          }) => ({
+            status: transaction.status,
+            method: transaction.method,
+            recordedById: transaction.recordedById,
+            confirmedById: transaction.confirmedById,
+          }),
+        ),
+    }
   })
-  expect(paymentState).toEqual([
+  expect(paymentState.payments).toEqual([
     {
       status: 'paid',
       method: 'cash',
@@ -770,6 +788,15 @@ test('admin confirms cash received by staff into the company account', async ({
       confirmedById: 'u-admin',
     },
   ])
+  expect(paymentState.messages).toContainEqual({
+    body: acknowledgementMessage,
+    senderId: 'u-admin',
+  })
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'sam@example.com')
+  await page.getByRole('button', { name: 'Messages' }).click()
+  await expect(page.getByText(acknowledgementMessage)).toBeVisible()
 })
 
 test('admin can remove a staff-entered payment added in error', async ({

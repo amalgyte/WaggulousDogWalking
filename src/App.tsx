@@ -7018,19 +7018,53 @@ function confirmPendingPayment(
   transactionId: string,
   confirmerId: string,
 ) {
-  setData((current) => ({
-    ...current,
-    transactions: current.transactions.map((transaction) =>
-      transaction.id === transactionId
-        ? {
-            ...transaction,
-            status: 'paid',
-            confirmedById: confirmerId,
-            description: `Confirmed ${transaction.method ?? 'other'} payment`,
-          }
-        : transaction,
-    ),
-  }))
+  setData((current) => {
+    const payment = current.transactions.find(
+      (transaction) =>
+        transaction.id === transactionId &&
+        transaction.status === 'payment-pending',
+    )
+    if (!payment) return current
+
+    const booking = current.bookings.find(
+      (candidate) => candidate.id === payment.bookingId,
+    )
+    const service = booking
+      ? current.services.find((candidate) => candidate.id === booking.serviceId)
+      : undefined
+    const method = payment.method ?? 'other'
+    const acknowledgement: Message = {
+      id: makeId('m'),
+      bookingId: payment.bookingId,
+      senderId: confirmerId,
+      recipientId: payment.customerId,
+      body: booking
+        ? `We have received your ${method} payment of ${formatMoney(
+            payment.amount,
+          )} for ${service?.name ?? 'your booking'} on ${formatDate(
+            booking.date,
+          )}. Thank you.`
+        : `We have received your ${method} payment of ${formatMoney(
+            payment.amount,
+          )}. Thank you.`,
+      createdAt: new Date().toISOString(),
+    }
+
+    return {
+      ...current,
+      transactions: current.transactions.map((transaction) =>
+        transaction.id === transactionId
+          ? {
+              ...transaction,
+              status: 'paid',
+              confirmedById: confirmerId,
+              description: `Confirmed ${method} payment`,
+            }
+          : transaction,
+      ),
+      messages: [acknowledgement, ...current.messages],
+    }
+  })
 }
 
 function approveBooking(
