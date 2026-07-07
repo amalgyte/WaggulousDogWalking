@@ -1627,12 +1627,8 @@ test('money matures completed services and allows client credit', async ({
   await loginWithEmail(page, 'admin@waggulous.com')
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByRole('button', { name: 'Payments' }).click()
-  await page
-    .locator('form')
-    .filter({ hasText: 'Payment received' })
-    .getByLabel('Client')
-    .selectOption('u-customer')
-  await expect(page.getByText(/Client balance:/)).toContainText(
+  await page.getByLabel('Client').selectOption('u-customer')
+  await expect(page.locator('.payment-detail-heading')).toContainText(
     '£42.00 outstanding',
   )
   await page.getByLabel('Payment received', { exact: true }).fill('30')
@@ -1640,7 +1636,7 @@ test('money matures completed services and allows client credit', async ({
   await expect(page.getByRole('status')).toContainText(
     '£30.00 payment recorded',
   )
-  await expect(page.getByText(/Client balance:/)).toContainText(
+  await expect(page.locator('.payment-detail-heading')).toContainText(
     '£12.00 outstanding',
   )
   await expect(page.getByText('Paid £14.00')).toHaveCount(2)
@@ -1653,7 +1649,7 @@ test('money matures completed services and allows client credit', async ({
   await expect(page.getByRole('status')).toContainText(
     '£20.00 payment recorded',
   )
-  await expect(page.getByText(/Client balance:/)).toContainText(
+  await expect(page.locator('.payment-detail-heading')).toContainText(
     '£8.00 in credit',
   )
   await expect(page.getByText('Paid £14.00')).toHaveCount(3)
@@ -1707,6 +1703,73 @@ test('money matures completed services and allows client credit', async ({
     ],
     credit: 8,
   })
+})
+
+test('admin payments page supports bespoke balance amendments', async ({
+  page,
+}) => {
+  await loginWithEmail(page, 'admin@waggulous.com')
+  await page.getByRole('button', { name: 'Payments' }).click()
+  await expect(
+    page.getByRole('heading', {
+      name: /outstanding balances, manual receipts, and balance amendments/i,
+    }),
+  ).toBeVisible()
+
+  await page.getByLabel('Client').selectOption('u-eliza')
+  await page.getByLabel('Adjustment direction').selectOption('increase')
+  await page.getByLabel('Adjustment amount').fill('17')
+  await page.getByLabel('Adjustment reason').fill('Collar replacement')
+  await page.getByRole('button', { name: /apply balance adjustment/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    '£17.00 charge adjustment applied for Eliza Moore.',
+  )
+  await expect(page.locator('.payment-detail-heading')).toContainText(
+    '£17.00 outstanding',
+  )
+  await expect(
+    page.locator('.balance-client-row').filter({ hasText: 'Eliza Moore' }),
+  ).toContainText('£17.00')
+
+  await page.getByLabel('Adjustment direction').selectOption('decrease')
+  await page.getByLabel('Adjustment amount').fill('5')
+  await page.getByLabel('Adjustment reason').fill('Goodwill credit')
+  await page.getByRole('button', { name: /apply balance adjustment/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    '£5.00 credit adjustment applied for Eliza Moore.',
+  )
+  await expect(page.locator('.payment-detail-heading')).toContainText(
+    '£12.00 outstanding',
+  )
+  await expect(page.getByText('Collar replacement')).toBeVisible()
+  await expect(page.getByText('Goodwill credit')).toBeVisible()
+
+  const amendments = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.transactions
+      .filter(
+        (transaction: { customerId: string; description: string }) =>
+          transaction.customerId === 'u-eliza' &&
+          transaction.description.includes('Balance adjustment'),
+      )
+      .map(
+        (transaction: {
+          amount: number
+          status: string
+          type?: string
+          method?: string
+        }) => ({
+          amount: transaction.amount,
+          status: transaction.status,
+          type: transaction.type,
+          method: transaction.method,
+        }),
+      )
+  })
+  expect(amendments).toEqual([
+    { amount: 5, status: 'paid', type: 'payment', method: 'other' },
+    { amount: 17, status: 'owed', type: 'charge', method: undefined },
+  ])
 })
 
 test('multi-household booking and walker exception workflows stay coherent', async ({

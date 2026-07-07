@@ -648,6 +648,69 @@ function calculateBookingPaid(data: AppData, booking: Booking) {
     .reduce((total, transaction) => total + transaction.amount, 0)
 }
 
+function buildClientPaymentTransactions(
+  data: AppData,
+  customerId: string,
+  amount: number,
+  method: Transaction['method'],
+  recordedById: string,
+) {
+  let remaining = amount
+  const createdAt = new Date().toISOString()
+  const payments: Transaction[] = []
+  const completedBookings = data.bookings
+    .filter(
+      (booking) =>
+        booking.customerId === customerId && bookingIsReadyForBilling(booking),
+    )
+    .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
+
+  for (const booking of completedBookings) {
+    if (remaining <= 0) break
+
+    const outstanding = calculateBookingOutstanding(
+      { ...data, transactions: [...payments, ...data.transactions] },
+      booking,
+    )
+    if (outstanding <= 0) continue
+
+    const allocated = Math.min(outstanding, remaining)
+    payments.push({
+      id: makeId('t'),
+      bookingId: booking.id,
+      customerId,
+      date: formatDateInputValue(),
+      description: `Bulk ${method ?? 'other'} payment`,
+      amount: allocated,
+      status: 'paid',
+      type: 'payment',
+      method,
+      recordedById,
+      confirmedById: recordedById,
+      createdAt,
+    })
+    remaining -= allocated
+  }
+
+  if (remaining > 0) {
+    payments.push({
+      id: makeId('t'),
+      customerId,
+      date: formatDateInputValue(),
+      description: `Client credit from ${method ?? 'other'} payment`,
+      amount: remaining,
+      status: 'paid',
+      type: 'payment',
+      method,
+      recordedById,
+      confirmedById: recordedById,
+      createdAt,
+    })
+  }
+
+  return payments
+}
+
 function bookingPaymentLabel(data: AppData, booking: Booking) {
   if (!bookingIsReadyForBilling(booking)) return ''
 
@@ -1943,6 +2006,7 @@ function OwnerDashboard({
   const [tab, setTab] = useState<
     | 'queue'
     | 'clients'
+    | 'payments'
     | 'staff'
     | 'services'
     | 'config'
@@ -2025,6 +2089,7 @@ function OwnerDashboard({
         items={[
           ['queue', 'Bookings'],
           ['clients', 'Clients'],
+          ['payments', 'Payments'],
           ['staff', 'Staff'],
           ['services', 'Services'],
           ['config', 'Config'],
@@ -2190,6 +2255,10 @@ function OwnerDashboard({
 
       {tab === 'clients' && (
         <ClientBookingPanel data={data} setData={setData} user={user} />
+      )}
+
+      {tab === 'payments' && (
+        <PaymentsAdminPanel data={data} setData={setData} user={user} />
       )}
 
       {tab === 'services' && <ServicesPanel data={data} setData={setData} />}
@@ -3523,59 +3592,13 @@ function ClientBookingPanel({
       )
       if (!customer) return current
 
-      let remaining = paymentAmount
-      const payments: Transaction[] = []
-      const completedBookings = current.bookings
-        .filter(
-          (booking) =>
-            booking.customerId === customer.id && bookingIsReadyForBilling(booking),
-        )
-        .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
-
-      for (const booking of completedBookings) {
-        if (remaining <= 0) break
-
-        const outstanding = calculateBookingOutstanding(
-          { ...current, transactions: [...payments, ...current.transactions] },
-          booking,
-        )
-        if (outstanding <= 0) continue
-
-        const allocated = Math.min(outstanding, remaining)
-        payments.push({
-          id: makeId('t'),
-          bookingId: booking.id,
-          customerId: customer.id,
-          date: formatDateInputValue(),
-          description: `Bulk ${bulkPaymentDraft.method ?? 'other'} payment`,
-          amount: allocated,
-          status: 'paid',
-          type: 'payment',
-          method: bulkPaymentDraft.method,
-          recordedById: user.id,
-          confirmedById: user.id,
-          createdAt: new Date().toISOString(),
-        })
-        remaining -= allocated
-      }
-
-      if (remaining > 0) {
-        payments.push({
-          id: makeId('t'),
-          customerId: customer.id,
-          date: formatDateInputValue(),
-          description: `Client credit from ${
-            bulkPaymentDraft.method ?? 'other'
-          } payment`,
-          amount: remaining,
-          status: 'paid',
-          type: 'payment',
-          method: bulkPaymentDraft.method,
-          recordedById: user.id,
-          confirmedById: user.id,
-          createdAt: new Date().toISOString(),
-        })
-      }
+      const payments = buildClientPaymentTransactions(
+        current,
+        customer.id,
+        paymentAmount,
+        bulkPaymentDraft.method,
+        user.id,
+      )
 
       return {
         ...current,
@@ -3658,7 +3681,7 @@ function ClientBookingPanel({
               setSuccessMessage('')
             }}
           >
-            Payments
+            Client ledger
           </button>
         )}
       </div>
@@ -4258,6 +4281,528 @@ function ClientBookingPanel({
           )}
         </section>
       )}
+    </section>
+  )
+}
+
+function PaymentsAdminPanel({
+  data,
+  setData,
+  user,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+  user: User
+}) {
+  const customers = data.users
+    .filter((candidate) => candidate.role === 'customer')
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const clientBalances = customers.map((customer) => {
+    const balance = calculateCustomerOutstanding(data, customer.id)
+    const completedBookings = data.bookings.filter(
+      (booking) =>
+        booking.customerId === customer.id && bookingIsReadyForBilling(booking),
+    )
+    const visibleTransactions = data.transactions.filter(
+      (transaction) =>
+        transaction.customerId === customer.id &&
+        transactionCountsTowardOutstanding(data, transaction),
+    )
+
+    return {
+      balance,
+      completedBookings,
+      customer,
+      visibleTransactions,
+    }
+  })
+  const outstandingClients = clientBalances.filter((record) => record.balance > 0)
+  const totalOutstanding = outstandingClients.reduce(
+    (total, record) => total + record.balance,
+    0,
+  )
+  const clientsInCredit = clientBalances.filter((record) => record.balance < 0)
+  const [selectedClientId, setSelectedClientId] = useState(
+    outstandingClients[0]?.customer.id ?? customers[0]?.id ?? '',
+  )
+  const [paymentDraft, setPaymentDraft] = useState({
+    amount: '',
+    method: 'cash' as Transaction['method'],
+  })
+  const [adjustmentDraft, setAdjustmentDraft] = useState({
+    direction: 'increase' as 'increase' | 'decrease',
+    amount: '',
+    reason: '',
+  })
+  const [error, setError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
+  const pendingStaffPayments = data.transactions
+    .filter((transaction) => transaction.status === 'payment-pending')
+    .sort(
+      (a, b) =>
+        (b.createdAt ?? b.date).localeCompare(a.createdAt ?? a.date) ||
+        b.date.localeCompare(a.date),
+    )
+  const selectedClient =
+    clientBalances.find((record) => record.customer.id === selectedClientId) ??
+    clientBalances[0]
+  const selectedCompletedBookings = selectedClient
+    ? selectedClient.completedBookings.sort((a, b) =>
+        `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`),
+      )
+    : []
+  const selectedTransactions = selectedClient
+    ? selectedClient.visibleTransactions.sort((a, b) =>
+        `${b.date}${b.createdAt ?? ''}`.localeCompare(
+          `${a.date}${a.createdAt ?? ''}`,
+        ),
+      )
+    : []
+
+  function selectClient(clientId: string) {
+    setSelectedClientId(clientId)
+    setError('')
+    setSuccessMessage('')
+  }
+
+  function recordManualPayment(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    setSuccessMessage('')
+
+    if (!selectedClient) {
+      setError('Choose a client before recording a payment.')
+      return
+    }
+
+    const paymentAmount = Number(paymentDraft.amount)
+
+    if (Number.isNaN(paymentAmount) || paymentAmount <= 0) {
+      setError('Enter a valid payment amount.')
+      return
+    }
+
+    setData((current) => ({
+      ...current,
+      transactions: [
+        ...buildClientPaymentTransactions(
+          current,
+          selectedClient.customer.id,
+          paymentAmount,
+          paymentDraft.method,
+          user.id,
+        ),
+        ...current.transactions,
+      ],
+    }))
+    setSuccessMessage(
+      `${formatMoney(paymentAmount)} payment recorded for ${
+        selectedClient.customer.name
+      }.`,
+    )
+    setPaymentDraft({ amount: '', method: 'cash' })
+  }
+
+  function applyBalanceAdjustment(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    setSuccessMessage('')
+
+    if (!selectedClient) {
+      setError('Choose a client before applying an adjustment.')
+      return
+    }
+
+    const adjustmentAmount = Number(adjustmentDraft.amount)
+
+    if (Number.isNaN(adjustmentAmount) || adjustmentAmount <= 0) {
+      setError('Enter a valid adjustment amount.')
+      return
+    }
+
+    const reason = adjustmentDraft.reason.trim() || 'Manual balance amendment'
+    const increasesBalance = adjustmentDraft.direction === 'increase'
+    const transaction: Transaction = {
+      id: makeId('t'),
+      customerId: selectedClient.customer.id,
+      date: formatDateInputValue(),
+      description: `Balance adjustment: ${reason}`,
+      amount: adjustmentAmount,
+      status: increasesBalance ? 'owed' : 'paid',
+      type: increasesBalance ? 'charge' : 'payment',
+      method: increasesBalance ? undefined : 'other',
+      recordedById: user.id,
+      confirmedById: user.id,
+      createdAt: new Date().toISOString(),
+    }
+
+    setData((current) => ({
+      ...current,
+      transactions: [transaction, ...current.transactions],
+    }))
+    setSuccessMessage(
+      `${formatMoney(adjustmentAmount)} ${
+        increasesBalance ? 'charge' : 'credit'
+      } adjustment applied for ${selectedClient.customer.name}.`,
+    )
+    setAdjustmentDraft({
+      direction: 'increase',
+      amount: '',
+      reason: '',
+    })
+  }
+
+  function confirmStaffPayment(transactionId: string) {
+    confirmPendingPayment(setData, transactionId, user.id)
+    setError('')
+    setSuccessMessage('Staff payment confirmed into the company account.')
+  }
+
+  function removeStaffPayment(payment: Transaction) {
+    const method = payment.method ?? 'other'
+    if (
+      !window.confirm(
+        `Remove pending ${method} payment of ${formatMoney(
+          payment.amount,
+        )}? Use this only if the staff member added it in error.`,
+      )
+    ) {
+      return
+    }
+
+    setData((current) => ({
+      ...current,
+      transactions: current.transactions.filter(
+        (transaction) => transaction.id !== payment.id,
+      ),
+    }))
+    setError('')
+    setSuccessMessage('Staff payment removed.')
+  }
+
+  return (
+    <section className="workspace">
+      <WorkspaceTitle
+        eyebrow="Payments"
+        title="Outstanding balances, manual receipts, and balance amendments."
+      />
+      <div className="metric-grid">
+        <Metric
+          icon={<WalletCards />}
+          label="Clients owing"
+          value={outstandingClients.length}
+        />
+        <Metric
+          icon={<CreditCard />}
+          label="Total outstanding"
+          value={formatMoney(totalOutstanding)}
+        />
+        <Metric
+          icon={<WalletCards />}
+          label="Clients in credit"
+          value={clientsInCredit.length}
+        />
+      </div>
+
+      <section className="workspace nested-workspace">
+        <WorkspaceTitle
+          eyebrow="Staff payments"
+          title="Confirm cash received into the company account."
+        />
+        {pendingStaffPayments.length === 0 ? (
+          <div className="empty-state">
+            <h3>No staff payments awaiting confirmation.</h3>
+            <p>
+              Cash or other payments marked received by staff will appear here
+              for admin confirmation.
+            </p>
+          </div>
+        ) : (
+          <div className="payment-pending-list">
+            {pendingStaffPayments.map((payment) => {
+              const booking = data.bookings.find(
+                (candidate) => candidate.id === payment.bookingId,
+              )
+              const customer = data.users.find(
+                (candidate) => candidate.id === payment.customerId,
+              )
+              const recorder = data.users.find(
+                (candidate) => candidate.id === payment.recordedById,
+              )
+              const service = booking
+                ? data.services.find(
+                    (candidate) => candidate.id === booking.serviceId,
+                  )
+                : undefined
+
+              return (
+                <div className="pending-payment-row" key={payment.id}>
+                  <span>
+                    Pending {payment.method ?? 'other'} payment ·{' '}
+                    {formatMoney(payment.amount)} · {customer?.name ?? 'Client'}{' '}
+                    {booking
+                      ? `· ${service?.name ?? 'Service'} on ${formatDate(
+                          booking.date,
+                        )}`
+                      : ''}
+                    {recorder ? ` · recorded by ${recorder.name}` : ''}
+                  </span>
+                  <div className="row-actions">
+                    <button
+                      className="button primary"
+                      type="button"
+                      onClick={() => confirmStaffPayment(payment.id)}
+                    >
+                      <Check size={16} />
+                      Confirm into company account
+                    </button>
+                    <button
+                      className="button danger"
+                      type="button"
+                      onClick={() => removeStaffPayment(payment)}
+                    >
+                      <X size={16} />
+                      Remove payment
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <div className="payments-layout">
+        <section className="balance-list" aria-label="Outstanding balances">
+          <div>
+            <p className="eyebrow">Outstanding clients</p>
+            <h3>Clients with money owed</h3>
+          </div>
+          {outstandingClients.length === 0 ? (
+            <div className="empty-state">
+              <h3>No outstanding client balances.</h3>
+              <p>Manual charges or completed unpaid services will appear here.</p>
+            </div>
+          ) : (
+            outstandingClients.map((record) => (
+              <button
+                aria-pressed={selectedClient?.customer.id === record.customer.id}
+                className="balance-client-row"
+                key={record.customer.id}
+                type="button"
+                onClick={() => selectClient(record.customer.id)}
+              >
+                <span>
+                  <strong>{record.customer.name}</strong>
+                  <small>{record.customer.email}</small>
+                </span>
+                <strong>{formatMoney(record.balance)}</strong>
+              </button>
+            ))
+          )}
+        </section>
+
+        <section className="payment-detail-panel">
+          {selectedClient ? (
+            <>
+              <div className="payment-detail-heading">
+                <div>
+                  <p className="eyebrow">Selected client</p>
+                  <h3>{selectedClient.customer.name}</h3>
+                  <p className="muted">{selectedClient.customer.email}</p>
+                </div>
+                <strong>{formatBalanceStatus(selectedClient.balance)}</strong>
+              </div>
+
+              <label>
+                Client
+                <select
+                  value={selectedClient.customer.id}
+                  onChange={(event) => selectClient(event.target.value)}
+                >
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.name} · {customer.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div className="payment-forms">
+                <form className="form-stack" onSubmit={recordManualPayment}>
+                  <h4>Manual receipt</h4>
+                  <label>
+                    Payment received
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={paymentDraft.amount}
+                      onChange={(event) =>
+                        setPaymentDraft({
+                          ...paymentDraft,
+                          amount: event.target.value,
+                        })
+                      }
+                      placeholder={formatBalanceAmount(selectedClient.balance)}
+                    />
+                  </label>
+                  <label>
+                    Method
+                    <select
+                      value={paymentDraft.method}
+                      onChange={(event) =>
+                        setPaymentDraft({
+                          ...paymentDraft,
+                          method: event.target.value as Transaction['method'],
+                        })
+                      }
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="bank">Bank transfer</option>
+                      <option value="card">Card</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </label>
+                  <button className="button primary" type="submit">
+                    <CreditCard size={16} />
+                    Record client payment
+                  </button>
+                </form>
+
+                <form className="form-stack" onSubmit={applyBalanceAdjustment}>
+                  <h4>Bespoke amendment</h4>
+                  <label>
+                    Adjustment direction
+                    <select
+                      value={adjustmentDraft.direction}
+                      onChange={(event) =>
+                        setAdjustmentDraft({
+                          ...adjustmentDraft,
+                          direction: event.target.value as
+                            | 'increase'
+                            | 'decrease',
+                        })
+                      }
+                    >
+                      <option value="increase">Increase balance owed</option>
+                      <option value="decrease">Reduce balance / add credit</option>
+                    </select>
+                  </label>
+                  <label>
+                    Adjustment amount
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={adjustmentDraft.amount}
+                      onChange={(event) =>
+                        setAdjustmentDraft({
+                          ...adjustmentDraft,
+                          amount: event.target.value,
+                        })
+                      }
+                      placeholder="0.00"
+                    />
+                  </label>
+                  <label>
+                    Adjustment reason
+                    <input
+                      value={adjustmentDraft.reason}
+                      onChange={(event) =>
+                        setAdjustmentDraft({
+                          ...adjustmentDraft,
+                          reason: event.target.value,
+                        })
+                      }
+                      placeholder="Goodwill credit, late fee, correction"
+                    />
+                  </label>
+                  <button className="button ghost" type="submit">
+                    <Plus size={16} />
+                    Apply balance adjustment
+                  </button>
+                </form>
+              </div>
+
+              {error && <p className="form-error">{error}</p>}
+              {successMessage && (
+                <p className="form-success" role="status">
+                  {successMessage}
+                </p>
+              )}
+
+              <section className="workspace nested-workspace">
+                <WorkspaceTitle
+                  eyebrow="Completed services"
+                  title="Allocation order for manual receipts."
+                />
+                {selectedCompletedBookings.length === 0 ? (
+                  <div className="empty-state">
+                    <h3>No completed services.</h3>
+                    <p>
+                      Services appear here after pickup and return have both
+                      been marked.
+                    </p>
+                  </div>
+                ) : (
+                  <BookingList
+                    bookings={selectedCompletedBookings}
+                    data={data}
+                  />
+                )}
+              </section>
+
+              <section className="workspace nested-workspace">
+                <WorkspaceTitle
+                  eyebrow="Ledger"
+                  title="Transactions counted in this balance."
+                />
+                {selectedTransactions.length === 0 ? (
+                  <div className="empty-state">
+                    <h3>No balance transactions.</h3>
+                    <p>Charges, payments, and amendments will appear here.</p>
+                  </div>
+                ) : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Description</th>
+                          <th>Status</th>
+                          <th>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedTransactions.map((transaction) => (
+                          <tr key={transaction.id}>
+                            <td>{formatDate(transaction.date)}</td>
+                            <td>{transaction.description}</td>
+                            <td>
+                              <span
+                                className={`status-badge ${transaction.status}`}
+                              >
+                                {transaction.status}
+                              </span>
+                            </td>
+                            <td>{formatMoney(transaction.amount)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
+            </>
+          ) : (
+            <div className="empty-state">
+              <h3>No clients available.</h3>
+              <p>Add a client before recording receipts or amendments.</p>
+            </div>
+          )}
+        </section>
+      </div>
     </section>
   )
 }
