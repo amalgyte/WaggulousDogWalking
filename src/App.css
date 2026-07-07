@@ -538,19 +538,46 @@ a:focus-visible {
 }
 
 .dashboard-shell {
-  background: var(--soft);
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--mint) 46%, transparent) 0,
+      transparent 34rem
+    ),
+    radial-gradient(
+      circle at bottom right,
+      color-mix(in srgb, var(--coral) 30%, transparent) 0,
+      transparent 28rem
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--paper) 88%, #eef8ff 12%),
+      color-mix(in srgb, var(--soft) 84%, #eef8ff 16%)
+    );
   min-height: 100svh;
 }
 
 .dashboard-header {
+  backdrop-filter: saturate(160%) blur(22px);
+  background: color-mix(in srgb, var(--paper) 68%, transparent);
   flex-wrap: wrap;
   gap: 10px;
 }
 
+.dashboard-header-actions {
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .session-pill {
   align-items: center;
-  background: #fff;
-  border: 1px solid var(--line);
+  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, #fff 70%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 68%, var(--line));
   border-radius: 999px;
   color: var(--muted);
   display: inline-flex;
@@ -563,26 +590,38 @@ a:focus-visible {
 
 .dashboard-grid {
   display: grid;
-  gap: 18px;
+  gap: 16px;
   margin: 0 auto;
-  padding: 18px;
+  max-width: 1420px;
+  padding: 14px;
   width: 100%;
 }
 
 .dashboard-nav {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  backdrop-filter: saturate(160%) blur(22px);
+  background: color-mix(in srgb, #fff 58%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 68%, var(--line));
+  border-radius: 18px;
+  box-shadow: 0 24px 58px rgba(47, 42, 35, 0.12);
   display: grid;
   gap: 4px;
   grid-auto-flow: column;
   overflow-x: auto;
-  padding: 6px;
+  padding: 8px;
+  scrollbar-width: none;
+}
+
+.dashboard-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .dashboard-nav button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+  justify-content: center;
   min-width: max-content;
-  padding: 8px 12px;
+  padding: 9px 13px;
 }
 
 .workspace {
@@ -598,8 +637,10 @@ a:focus-visible {
 }
 
 .inline-section {
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, #fff 48%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 62%, var(--line));
+  border-radius: 16px;
   display: grid;
   gap: 14px;
   padding: 14px;
@@ -631,6 +672,99 @@ a:focus-visible {
   margin: 0;
 }
 
+.dashboard-hero {
+  align-items: end;
+  backdrop-filter: saturate(180%) blur(26px);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, #fff 74%, transparent),
+      color-mix(in srgb, var(--sage) 48%, transparent)
+    ),
+    color-mix(in srgb, #fff 32%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 74%, var(--line));
+  border-radius: 24px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 28px 70px rgba(42, 50, 42, 0.14);
+  display: grid;
+  gap: 18px;
+  overflow: hidden;
+  padding: 20px;
+  position: relative;
+}
+
+.dashboard-hero::after {
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0.72),
+    rgba(255, 255, 255, 0) 42%
+  );
+  content: '';
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+}
+
+.dashboard-hero > * {
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-hero h1 {
+  color: var(--ink);
+  font-size: 2rem;
+  line-height: 1;
+  margin: 0;
+}
+
+.dashboard-hero p {
+  color: var(--muted);
+  margin: 8px 0 0;
+  max-width: 68ch;
+}
+
+.dashboard-hero strong {
+  color: var(--forest);
+  display: block;
+  margin-top: 10px;
+}
+
+.quick-actions {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+}
+
+.quick-action {
+  align-items: center;
+  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, #fff 68%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 72%, var(--line));
+  border-radius: 999px;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 850;
+  gap: 8px;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 14px;
+}
+
+.quick-action.primary {
+  background: color-mix(in srgb, var(--forest) 92%, #fff 8%);
+  border-color: color-mix(in srgb, var(--forest) 72%, #fff);
+  color: #fff;
+}
+
+.quick-action:hover,
+.quick-action:focus-visible {
+  transform: translateY(-1px);
+}
+
 .booking-stack,
 .service-admin-list,
 .message-list {
@@ -639,10 +773,11 @@ a:focus-visible {
 }
 
 .timeline-panel {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
+  backdrop-filter: blur(24px);
+  background: color-mix(in srgb, #fff 70%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 72%, var(--line));
+  border-radius: 20px;
+  box-shadow: 0 22px 56px rgba(57, 47, 38, 0.11);
   display: grid;
   gap: 14px;
   overflow: hidden;
@@ -681,8 +816,9 @@ a:focus-visible {
 .timeline-frame {
   --timeline-header-height: 56px;
   --timeline-row-height: 142px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: color-mix(in srgb, #fff 58%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 62%, var(--line));
+  border-radius: 16px;
   display: grid;
   grid-template-columns: minmax(138px, 0.26fr) minmax(0, 1fr);
   grid-template-rows: var(--timeline-header-height) auto;
@@ -691,7 +827,7 @@ a:focus-visible {
 
 .timeline-staff-heading {
   align-items: center;
-  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
   border-bottom: 1px solid var(--line);
   color: var(--muted);
   display: flex;
@@ -714,7 +850,7 @@ a:focus-visible {
 }
 
 .timeline-scale {
-  background: var(--paper);
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
   border-bottom: 1px solid var(--line);
   height: var(--timeline-header-height);
   position: relative;
@@ -826,7 +962,7 @@ a:focus-visible {
 .timeline-booking {
   background: #edf9ef;
   border: 1px solid #c6e8ce;
-  border-radius: 8px;
+  border-radius: 14px;
   color: var(--ink);
   cursor: pointer;
   display: grid;
@@ -913,10 +1049,12 @@ a:focus-visible {
 }
 
 .timeline-detail {
-  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, #fff 44%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 62%, var(--line));
+  border-radius: 16px;
   display: grid;
   gap: 14px;
-  padding-top: 14px;
+  padding: 14px;
 }
 
 .timeline-detail-controls {
@@ -1071,15 +1209,21 @@ a:focus-visible {
 
 .staff-bookings-toolbar {
   align-items: end;
+  backdrop-filter: blur(20px);
+  background: color-mix(in srgb, #fff 58%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 68%, var(--line));
+  border-radius: 18px;
   display: grid;
   gap: 12px;
+  padding: 14px;
 }
 
 .staff-jobs-timeline {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
+  backdrop-filter: blur(24px);
+  background: color-mix(in srgb, #fff 70%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 72%, var(--line));
+  border-radius: 20px;
+  box-shadow: 0 22px 56px rgba(57, 47, 38, 0.11);
   display: grid;
   gap: 14px;
   overflow: hidden;
@@ -1095,9 +1239,9 @@ a:focus-visible {
 }
 
 .staff-jobs-timeline-scale {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 8px 8px 0 0;
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 62%, var(--line));
+  border-radius: 16px 16px 0 0;
   height: 48px;
   position: relative;
 }
@@ -1120,8 +1264,8 @@ a:focus-visible {
     color-mix(in srgb, var(--line) 72%, transparent) calc(12.5% - 1px),
     color-mix(in srgb, var(--line) 72%, transparent) 12.5%
   );
-  border: 1px solid var(--line);
-  border-radius: 0 0 8px 8px;
+  border: 1px solid color-mix(in srgb, #fff 62%, var(--line));
+  border-radius: 0 0 16px 16px;
   border-top: 0;
   height: 132px;
   position: relative;
@@ -1130,7 +1274,7 @@ a:focus-visible {
 .staff-jobs-timeline-card {
   background: #edf9ef;
   border: 1px solid #c6e8ce;
-  border-radius: 8px;
+  border-radius: 14px;
   color: var(--ink);
   cursor: pointer;
   display: grid;
@@ -1195,9 +1339,9 @@ a:focus-visible {
 
 .pending-payment-row {
   align-items: center;
-  background: #fff8ea;
+  background: color-mix(in srgb, #fff8ea 82%, transparent);
   border: 1px solid #efd9a9;
-  border-radius: 8px;
+  border-radius: 16px;
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -1212,10 +1356,11 @@ a:focus-visible {
 
 .balance-list,
 .payment-detail-panel {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
+  backdrop-filter: blur(24px);
+  background: color-mix(in srgb, #fff 70%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 72%, var(--line));
+  border-radius: 20px;
+  box-shadow: 0 22px 56px rgba(57, 47, 38, 0.11);
   display: grid;
   gap: 12px;
   padding: 16px;
@@ -1230,9 +1375,9 @@ a:focus-visible {
 
 .balance-client-row {
   align-items: center;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: color-mix(in srgb, var(--paper) 74%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 60%, var(--line));
+  border-radius: 16px;
   color: var(--ink);
   cursor: pointer;
   display: flex;
@@ -1273,9 +1418,9 @@ a:focus-visible {
 }
 
 .payment-detail-heading > strong {
-  background: var(--soft);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: color-mix(in srgb, var(--soft) 74%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 60%, var(--line));
+  border-radius: 16px;
   color: var(--forest);
   padding: 10px 12px;
 }
@@ -1286,8 +1431,9 @@ a:focus-visible {
 }
 
 .payment-forms form {
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: color-mix(in srgb, #fff 48%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 58%, var(--line));
+  border-radius: 16px;
   padding: 14px;
 }
 
@@ -1387,10 +1533,11 @@ a:focus-visible {
 .staff-row,
 .profile-summary {
   align-items: center;
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
+  backdrop-filter: blur(22px);
+  background: color-mix(in srgb, #fff 68%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 70%, var(--line));
+  border-radius: 18px;
+  box-shadow: 0 22px 56px rgba(57, 47, 38, 0.1);
   display: flex;
   gap: 14px;
   padding: 16px;
@@ -1415,7 +1562,7 @@ a:focus-visible {
   align-items: center;
   background: var(--mint);
   border: 1px solid color-mix(in srgb, var(--mint) 70%, #000 10%);
-  border-radius: 8px;
+  border-radius: 16px;
   color: var(--forest);
   display: flex;
   flex: 0 0 68px;
@@ -1481,7 +1628,7 @@ a:focus-visible {
   align-items: center;
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 18px;
   box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
   display: flex;
   gap: 14px;
@@ -1508,7 +1655,7 @@ a:focus-visible {
 .theme-card {
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 18px;
   box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
   display: grid;
   gap: 14px;
@@ -1561,7 +1708,7 @@ a:focus-visible {
 .pet-colour-settings {
   background: #fff;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 18px;
   box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
   display: grid;
   gap: 14px;
@@ -1761,6 +1908,115 @@ tr:last-child td {
   font-size: 0.85rem;
 }
 
+.dashboard-shell .metric-card,
+.dashboard-shell .pet-card,
+.dashboard-shell .booking-row,
+.dashboard-shell .service-admin-row,
+.dashboard-shell .message-row,
+.dashboard-shell .theme-summary,
+.dashboard-shell .theme-card,
+.dashboard-shell .pet-colour-settings,
+.dashboard-shell .table-wrap,
+.dashboard-shell .empty-state,
+.dashboard-shell .workspace > form {
+  backdrop-filter: blur(22px);
+  background: color-mix(in srgb, #fff 68%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 70%, var(--line));
+  border-radius: 18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 20px 48px rgba(57, 47, 38, 0.09);
+}
+
+.dashboard-shell .workspace > form {
+  padding: 16px;
+}
+
+.dashboard-shell .metric-card {
+  align-items: center;
+}
+
+.dashboard-shell .metric-grid {
+  width: 100%;
+}
+
+.dashboard-shell .metric-card {
+  width: 100%;
+}
+
+.dashboard-shell .metric-card .icon-chip,
+.dashboard-shell .brand-mark,
+.dashboard-shell .icon-chip {
+  border-radius: 14px;
+}
+
+.dashboard-shell input,
+.dashboard-shell select,
+.dashboard-shell textarea {
+  background: color-mix(in srgb, #fff 78%, transparent);
+  border-color: color-mix(in srgb, #fff 54%, var(--line));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.54);
+}
+
+.dashboard-shell fieldset,
+.dashboard-shell .price-preview,
+.dashboard-shell .payment-note,
+.dashboard-shell .pet-address-notes,
+.dashboard-shell .slot-list .toggle-label,
+.dashboard-shell .pet-colour-control,
+.dashboard-shell .species-catalogue-row {
+  background: color-mix(in srgb, #fff 50%, transparent);
+  border-color: color-mix(in srgb, #fff 58%, var(--line));
+  border-radius: 16px;
+}
+
+.dashboard-shell .button {
+  border-radius: 999px;
+  min-height: 44px;
+}
+
+.dashboard-shell .button.ghost,
+.dashboard-shell .button.secondary {
+  backdrop-filter: blur(16px);
+  background: color-mix(in srgb, #fff 66%, transparent);
+  border-color: color-mix(in srgb, #fff 70%, var(--line));
+}
+
+.dashboard-shell .button.primary {
+  background: color-mix(in srgb, var(--forest) 92%, #fff 8%);
+  color: #fff;
+}
+
+.dashboard-shell .button.primary:hover,
+.dashboard-shell .button.primary:focus-visible {
+  background: color-mix(in srgb, var(--forest) 82%, #000 18%);
+}
+
+.dashboard-shell .button.danger {
+  background: color-mix(in srgb, #fff0ed 88%, transparent);
+}
+
+.dashboard-shell .pet-mini-list > span {
+  align-items: center;
+  background: color-mix(in srgb, #fff 58%, transparent);
+  border: 1px solid color-mix(in srgb, #fff 64%, var(--line));
+  border-radius: 999px;
+  color: var(--ink);
+  display: inline-flex;
+  font-weight: 800;
+  gap: 6px;
+  padding: 7px 10px;
+}
+
+.dashboard-shell .section-heading.compact {
+  margin-bottom: 2px;
+}
+
+.dashboard-shell .section-heading.compact h2 {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
 @media (min-width: 720px) {
   .site-header,
   .dashboard-header {
@@ -1813,6 +2069,16 @@ tr:last-child td {
 
   .staff-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 0.42fr);
+    padding: 24px;
+  }
+
+  .quick-actions {
+    justify-self: end;
+    width: min(100%, 320px);
   }
 
   .staff-bookings-toolbar {
@@ -1871,20 +2137,27 @@ tr:last-child td {
   }
 
   .dashboard-grid {
-    grid-template-columns: 190px minmax(0, 1fr);
-    padding: 28px;
+    gap: 22px;
+    grid-template-columns: 214px minmax(0, 1fr);
+    padding: 26px;
   }
 
   .dashboard-nav {
     align-self: start;
     grid-auto-flow: row;
+    gap: 6px;
     position: sticky;
     top: 92px;
   }
 
   .dashboard-nav button {
     justify-content: flex-start;
+    min-height: 44px;
     text-align: left;
+  }
+
+  .dashboard-hero h1 {
+    font-size: 2.55rem;
   }
 
   .service-admin-details {

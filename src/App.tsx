@@ -1873,16 +1873,18 @@ function DashboardShell({
           </span>
           <span>Waggulous</span>
         </a>
-        <div className="session-pill">
-          <UserRound size={16} />
-          <span>
-            {user.name} · {user.role}
-          </span>
+        <div className="dashboard-header-actions">
+          <div className="session-pill">
+            <UserRound size={16} />
+            <span>
+              {user.name} · {user.role}
+            </span>
+          </div>
+          <button className="button ghost" type="button" onClick={onSignOut}>
+            <LogOut size={16} />
+            Sign out
+          </button>
         </div>
-        <button className="button ghost" type="button" onClick={onSignOut}>
-          <LogOut size={16} />
-          Sign out
-        </button>
       </header>
 
       {user.role === 'customer' && (
@@ -1936,6 +1938,39 @@ function CustomerDashboard({
 
       {tab === 'overview' && (
         <section className="workspace">
+          <DashboardHero
+            eyebrow="Customer portal"
+            title={`Hello ${user.name.split(' ')[0] || user.name}`}
+            summary="The quickest path to request care, update pet details, and check what is happening next."
+            actions={
+              <>
+                <button
+                  className="quick-action primary"
+                  type="button"
+                  onClick={() => setTab('book')}
+                >
+                  <CalendarDays size={18} />
+                  Book care
+                </button>
+                <button
+                  className="quick-action"
+                  type="button"
+                  onClick={() => setTab('pets')}
+                >
+                  <PawPrint size={18} />
+                  Add pet
+                </button>
+                <button
+                  className="quick-action"
+                  type="button"
+                  onClick={() => setTab('chat')}
+                >
+                  <MessageCircle size={18} />
+                  Inbox
+                </button>
+              </>
+            }
+          />
           <WorkspaceTitle
             eyebrow="Customer portal"
             title="Your pets, bookings, and balance."
@@ -2017,6 +2052,9 @@ function OwnerDashboard({
     | 'account'
   >('queue')
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
+  const pendingStaffPayments = data.transactions.filter(
+    (transaction) => transaction.status === 'payment-pending',
+  ).length
   const ownerQueueBookings = data.bookings
     .filter((booking) => {
       const awaitingApproval = booking.status === 'requested'
@@ -2104,6 +2142,46 @@ function OwnerDashboard({
 
       {tab === 'queue' && (
         <section className="workspace">
+          <DashboardHero
+            eyebrow="Admin console"
+            title="Today’s operating desk"
+            summary="The main queue, staff assignment, client ledger, and configuration are one tap away."
+            meta={`${ownerQueueBookings.length} booking action${
+              ownerQueueBookings.length === 1 ? '' : 's'
+            } · ${pendingStaffPayments} staff payment${
+              pendingStaffPayments === 1 ? '' : 's'
+            } pending · ${walkers.length} walker${
+              walkers.length === 1 ? '' : 's'
+            }`}
+            actions={
+              <>
+                <button
+                  className="quick-action primary"
+                  type="button"
+                  onClick={() => setTab('clients')}
+                >
+                  <Plus size={18} />
+                  Add client
+                </button>
+                <button
+                  className="quick-action"
+                  type="button"
+                  onClick={() => setTab('payments')}
+                >
+                  <CreditCard size={18} />
+                  Review ledger
+                </button>
+                <button
+                  className="quick-action"
+                  type="button"
+                  onClick={() => setTab('staff')}
+                >
+                  <UserRound size={18} />
+                  Team setup
+                </button>
+              </>
+            }
+          />
           <WorkspaceTitle
             eyebrow="Admin console"
             title="Approve bookings and assign walkers."
@@ -3165,6 +3243,50 @@ function WalkerDashboard({
       />
       {tab === 'jobs' && (
         <section className="workspace">
+          <DashboardHero
+            eyebrow="Walker workflow"
+            title={`${selectedDateActiveBookings.length} active job${
+              selectedDateActiveBookings.length === 1 ? '' : 's'
+            } for ${formatDate(selectedJobDate)}`}
+            summary="Pickup, return, and payment notes stay attached to the selected day so the next action is always close."
+            meta={`${selectedDateCompletedBookings.length} completed · ${
+              user.canSelfAssign ? claimableBookings.length : 0
+            } available to claim`}
+            actions={
+              <>
+                <button
+                  className="quick-action primary"
+                  type="button"
+                  onClick={() =>
+                    setStaffBookingsView((current) =>
+                      current === 'timeline' ? 'list' : 'timeline',
+                    )
+                  }
+                >
+                  <CalendarDays size={18} />
+                  {staffBookingsView === 'timeline'
+                    ? 'Show list'
+                    : 'Schedule view'}
+                </button>
+                <button
+                  className="quick-action"
+                  type="button"
+                  onClick={() => setTab('chat')}
+                >
+                  <MessageCircle size={18} />
+                  Inbox
+                </button>
+                <button
+                  className="quick-action"
+                  type="button"
+                  onClick={() => setTab('holidays')}
+                >
+                  <Clock size={18} />
+                  Update availability
+                </button>
+              </>
+            }
+          />
           <WorkspaceTitle
             eyebrow="Walker workflow"
             title="Log pickup and return for authorised pets."
@@ -5864,10 +5986,68 @@ function DashboardNav({
           type="button"
           onClick={() => onChange(id)}
         >
+          {dashboardNavIcon(id)}
           {label}
         </button>
       ))}
     </nav>
+  )
+}
+
+function dashboardNavIcon(id: string) {
+  const iconProps = { size: 17, 'aria-hidden': true }
+
+  if (['overview', 'queue', 'jobs'].includes(id)) {
+    return <CalendarDays {...iconProps} />
+  }
+  if (['pets', 'book', 'services'].includes(id)) {
+    return <PawPrint {...iconProps} />
+  }
+  if (['money', 'payments'].includes(id)) {
+    return <WalletCards {...iconProps} />
+  }
+  if (['chat'].includes(id)) {
+    return <MessageCircle {...iconProps} />
+  }
+  if (['clients', 'staff', 'profile', 'account'].includes(id)) {
+    return <UserRound {...iconProps} />
+  }
+  if (['holidays'].includes(id)) {
+    return <Clock {...iconProps} />
+  }
+  if (['config'].includes(id)) {
+    return <ShieldCheck {...iconProps} />
+  }
+  if (['theme'].includes(id)) {
+    return <Palette {...iconProps} />
+  }
+
+  return <Sparkles {...iconProps} />
+}
+
+function DashboardHero({
+  eyebrow,
+  title,
+  summary,
+  meta,
+  actions,
+}: {
+  eyebrow: string
+  title: string
+  summary: string
+  meta?: string
+  actions: ReactNode
+}) {
+  return (
+    <section className="dashboard-hero">
+      <div>
+        <p className="eyebrow">{eyebrow}</p>
+        <h1>{title}</h1>
+        <p>{summary}</p>
+        {meta && <strong>{meta}</strong>}
+      </div>
+      <div className="quick-actions">{actions}</div>
+    </section>
   )
 }
 
