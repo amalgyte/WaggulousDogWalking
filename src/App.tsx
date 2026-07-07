@@ -54,6 +54,7 @@ type MultiPetPricingMode =
   | 'fixed-discount'
   | 'percent-discount'
   | 'additional-pet-price'
+type StaffBookingsView = 'list' | 'timeline'
 type BookingStatus =
   | 'requested'
   | 'approved'
@@ -201,6 +202,7 @@ type AppData = {
 
 const storageKey = 'waggulous-mvp-data'
 const sessionKey = 'waggulous-session-user'
+const staffBookingsViewKeyPrefix = 'waggulous-staff-bookings-view'
 const shouldSyncFirebase = import.meta.env.VITE_WAGGULOUS_STORAGE !== 'local'
 const siteThemes: {
   id: ThemeId
@@ -2807,6 +2809,134 @@ function BookingTimeline({
   )
 }
 
+function StaffJobsTimeline({
+  bookings,
+  data,
+  renderBooking,
+  selectedDate,
+}: {
+  bookings: Booking[]
+  data: AppData
+  renderBooking: (booking: Booking) => ReactNode
+  selectedDate: string
+}) {
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(
+    bookings[0]?.id ?? null,
+  )
+  const timelineStartMinute = 6 * 60
+  const timelineEndMinute = 22 * 60
+  const timelineMinutes = timelineEndMinute - timelineStartMinute
+  const timeMarkers = Array.from(
+    { length: 9 },
+    (_, index) => timelineStartMinute + index * 120,
+  )
+  const selectedBooking =
+    bookings.find((booking) => booking.id === selectedBookingId) ??
+    bookings[0] ??
+    null
+
+  useEffect(() => {
+    if (bookings.length === 0) {
+      setSelectedBookingId(null)
+      return
+    }
+
+    if (!bookings.some((booking) => booking.id === selectedBookingId)) {
+      setSelectedBookingId(bookings[0].id)
+    }
+  }, [bookings, selectedBookingId])
+
+  function bookingPosition(booking: Booking) {
+    const service = data.services.find(
+      (candidate) => candidate.id === booking.serviceId,
+    )
+    const rawStart = timeToMinutes(booking.time) - timelineStartMinute
+    const start = Math.min(
+      Math.max(0, timelineMinutes - 30),
+      Math.max(0, rawStart),
+    )
+    const duration = Math.max(30, getBookingDurationMinutes(booking, service))
+    const width = Math.min(duration, timelineMinutes - start)
+
+    return {
+      left: `${(start / timelineMinutes) * 100}%`,
+      width: `${(width / timelineMinutes) * 100}%`,
+    }
+  }
+
+  if (bookings.length === 0) {
+    return (
+      <div className="empty-state">
+        <h3>No appointments for this date.</h3>
+        <p>
+          Assigned walks and sitting visits for {formatDate(selectedDate)} will
+          appear here.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="staff-jobs-timeline">
+      <div className="staff-jobs-timeline-scroll">
+        <div className="staff-jobs-timeline-track">
+          <div className="staff-jobs-timeline-scale">
+            {timeMarkers.map((minute) => (
+              <span
+                key={minute}
+                style={{
+                  left: `${
+                    ((minute - timelineStartMinute) / timelineMinutes) * 100
+                  }%`,
+                }}
+              >
+                {minutesToTimeLabel(minute)}
+              </span>
+            ))}
+          </div>
+          <div className="staff-jobs-timeline-lane">
+            {bookings.map((booking) => {
+              const service = data.services.find(
+                (candidate) => candidate.id === booking.serviceId,
+              )
+              const customer = data.users.find(
+                (candidate) => candidate.id === booking.customerId,
+              )
+              const pets = data.pets.filter((pet) =>
+                booking.petIds.includes(pet.id),
+              )
+
+              return (
+                <button
+                  aria-pressed={selectedBooking?.id === booking.id}
+                  className={`staff-jobs-timeline-card status-${booking.status}`}
+                  key={booking.id}
+                  style={bookingPosition(booking)}
+                  type="button"
+                  onClick={() => setSelectedBookingId(booking.id)}
+                >
+                  <span>{formatBookingTime(booking)}</span>
+                  <strong>
+                    <PetInlineList pets={pets} />
+                  </strong>
+                  <small>
+                    {service?.name ?? 'Service'} · {customer?.name}
+                  </small>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+      {selectedBooking && (
+        <div className="staff-jobs-timeline-detail">
+          {renderBooking(selectedBooking)}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function WalkerDashboard({
   data,
   setData,
@@ -2822,6 +2952,13 @@ function WalkerDashboard({
   const [selectedJobDate, setSelectedJobDate] = useState(() =>
     formatDateInputValue(),
   )
+  const staffBookingsViewStorageKey = `${staffBookingsViewKeyPrefix}-${user.id}`
+  const [staffBookingsView, setStaffBookingsView] =
+    useState<StaffBookingsView>(() =>
+      localStorage.getItem(staffBookingsViewStorageKey) === 'timeline'
+        ? 'timeline'
+        : 'list',
+    )
   const today = formatDateInputValue()
   const claimWindowEnd = addDaysInputValue(today, 7)
   const navItems: [typeof tab, string][] = user.canSelfAssign
@@ -2881,6 +3018,10 @@ function WalkerDashboard({
         booking.date <= claimWindowEnd,
     )
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))
+
+  useEffect(() => {
+    localStorage.setItem(staffBookingsViewStorageKey, staffBookingsView)
+  }, [staffBookingsView, staffBookingsViewStorageKey])
 
   function claimBooking(bookingId: string) {
     const bookingToClaim = data.bookings.find(
@@ -3028,26 +3169,56 @@ function WalkerDashboard({
             eyebrow="Walker workflow"
             title="Log pickup and return for authorised pets."
           />
-          <label className="field-inline">
-            Job date
-            <input
-              type="date"
-              value={selectedJobDate}
-              onChange={(event) => setSelectedJobDate(event.target.value)}
-            />
-          </label>
-          <div className="booking-stack">
-            {selectedDateActiveBookings.length === 0 && (
-              <div className="empty-state">
-                <h3>No appointments for this date.</h3>
-                <p>
-                  Assigned walks and sitting visits for {formatDate(selectedJobDate)}{' '}
-                  will appear here.
-                </p>
-              </div>
-            )}
-            {selectedDateActiveBookings.map(renderAssignedBooking)}
+          <div className="staff-bookings-toolbar">
+            <label className="field-inline">
+              Job date
+              <input
+                type="date"
+                value={selectedJobDate}
+                onChange={(event) => setSelectedJobDate(event.target.value)}
+              />
+            </label>
+            <div
+              className="segmented-control compact"
+              aria-label="Staff bookings view"
+            >
+              <button
+                className={staffBookingsView === 'list' ? 'is-active' : ''}
+                type="button"
+                onClick={() => setStaffBookingsView('list')}
+              >
+                List
+              </button>
+              <button
+                className={staffBookingsView === 'timeline' ? 'is-active' : ''}
+                type="button"
+                onClick={() => setStaffBookingsView('timeline')}
+              >
+                Timeline
+              </button>
+            </div>
           </div>
+          {staffBookingsView === 'timeline' ? (
+            <StaffJobsTimeline
+              bookings={selectedDateActiveBookings}
+              data={data}
+              renderBooking={renderAssignedBooking}
+              selectedDate={selectedJobDate}
+            />
+          ) : (
+            <div className="booking-stack">
+              {selectedDateActiveBookings.length === 0 && (
+                <div className="empty-state">
+                  <h3>No appointments for this date.</h3>
+                  <p>
+                    Assigned walks and sitting visits for{' '}
+                    {formatDate(selectedJobDate)} will appear here.
+                  </p>
+                </div>
+              )}
+              {selectedDateActiveBookings.map(renderAssignedBooking)}
+            </div>
+          )}
           <section className="workspace nested-workspace">
             <WorkspaceTitle
               eyebrow="Available to claim"

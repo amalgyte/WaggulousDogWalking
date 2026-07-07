@@ -708,6 +708,27 @@ test('walker jobs are filtered by date with completed jobs separated', async ({
   })
   await expect(completedJobs.locator('article').filter({ hasText: 'Pip' })).toBeVisible()
   await expect(completedJobs).toContainText('completed')
+
+  await page.getByLabel('Job date').fill(dateInputFromToday(0))
+  await page.getByRole('button', { name: 'Timeline' }).click()
+  const staffTimeline = page.locator('.staff-jobs-timeline')
+  await expect(staffTimeline).toBeVisible()
+  await expect(
+    staffTimeline.getByRole('button', { name: /Mabel/i }),
+  ).toBeVisible()
+  await expect(staffTimeline.locator('article').filter({ hasText: 'Mabel' })).toBeVisible()
+
+  const savedView = await page.evaluate(() =>
+    localStorage.getItem('waggulous-staff-bookings-view-u-walker'),
+  )
+  expect(savedView).toBe('timeline')
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'walker@waggulous.local')
+  await expect(page.getByRole('button', { name: 'Timeline' })).toHaveClass(
+    /is-active/,
+  )
+  await expect(page.locator('.staff-jobs-timeline')).toBeVisible()
 })
 
 test('admin confirms cash received by staff into the company account', async ({

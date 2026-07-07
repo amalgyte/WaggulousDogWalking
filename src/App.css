@@ -369,6 +369,11 @@
   padding: 4px;
 }
 
+.segmented-control.compact {
+  margin: 0;
+  min-width: min(100%, 240px);
+}
+
 .segmented-control button,
 .dashboard-nav button {
   background: transparent;
@@ -1064,6 +1069,130 @@ a:focus-visible {
   gap: 8px;
 }
 
+.staff-bookings-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+}
+
+.staff-jobs-timeline {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(57, 47, 38, 0.08);
+  display: grid;
+  gap: 14px;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.staff-jobs-timeline-scroll {
+  overflow-x: auto;
+}
+
+.staff-jobs-timeline-track {
+  min-width: 780px;
+}
+
+.staff-jobs-timeline-scale {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px 8px 0 0;
+  height: 48px;
+  position: relative;
+}
+
+.staff-jobs-timeline-scale span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.staff-jobs-timeline-lane {
+  background-image: repeating-linear-gradient(
+    90deg,
+    #fff 0,
+    #fff calc(12.5% - 1px),
+    color-mix(in srgb, var(--line) 72%, transparent) calc(12.5% - 1px),
+    color-mix(in srgb, var(--line) 72%, transparent) 12.5%
+  );
+  border: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  border-top: 0;
+  height: 132px;
+  position: relative;
+}
+
+.staff-jobs-timeline-card {
+  background: #edf9ef;
+  border: 1px solid #c6e8ce;
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  min-height: 72px;
+  min-width: 116px;
+  overflow: hidden;
+  padding: 8px 10px;
+  position: absolute;
+  text-align: left;
+  top: 18px;
+  white-space: nowrap;
+}
+
+.staff-jobs-timeline-card:hover,
+.staff-jobs-timeline-card:focus-visible,
+.staff-jobs-timeline-card[aria-pressed='true'] {
+  border-color: var(--forest);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--forest) 18%, transparent);
+  z-index: 3;
+}
+
+.staff-jobs-timeline-card span,
+.staff-jobs-timeline-card small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.staff-jobs-timeline-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.staff-jobs-timeline-card .pet-inline-list {
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.staff-jobs-timeline-card.status-requested {
+  background: #fff4dc;
+  border-color: #f3d59c;
+}
+
+.staff-jobs-timeline-card.status-in-progress {
+  background: #e8f1ff;
+  border-color: #bad2fb;
+}
+
+.staff-jobs-timeline-card.status-completed {
+  background: #e6f4ef;
+  border-color: #b9dfd0;
+}
+
+.staff-jobs-timeline-detail {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
 .pending-payment-row {
   align-items: center;
   background: #fff8ea;
@@ -1684,6 +1813,10 @@ tr:last-child td {
 
   .staff-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-bookings-toolbar {
+    grid-template-columns: minmax(220px, 0.4fr) auto;
   }
 
   .payment-forms {
