@@ -37,6 +37,10 @@ import type {
 } from 'react'
 import heroImage from './assets/waggulous-hero.png'
 import { appDataRef } from './firebase'
+import {
+  queuePendingBookingUpdate,
+  reconcilePendingBookingUpdates,
+} from './offlineSync'
 import './App.css'
 
 type Role = 'customer' | 'admin' | 'owner' | 'walker'
@@ -1444,15 +1448,19 @@ function App() {
           return
         }
 
-        const nextData = normaliseAppData(snapshot.val())
+        const remoteData = normaliseAppData(snapshot.val())
+        const remoteJson = serialiseAppData(remoteData)
+        const nextData = reconcilePendingBookingUpdates(remoteData)
         const nextJson = serialiseAppData(nextData)
-        lastFirebaseJsonRef.current = nextJson
+        const hasPendingLocalUpdates = nextJson !== remoteJson
+        lastFirebaseJsonRef.current = remoteJson
 
-        setData((current) =>
-          serialiseAppData(normaliseAppData(current)) === nextJson
+        setData((current) => {
+          const currentJson = serialiseAppData(normaliseAppData(current))
+          return currentJson === nextJson && !hasPendingLocalUpdates
             ? current
-            : nextData,
-        )
+            : nextData
+        })
       },
       (error) => {
         console.warn('Waggulous Firebase sync failed', error)
@@ -8102,6 +8110,8 @@ function stampBooking(
   bookingId: string,
   fields: Partial<Booking>,
 ) {
+  queuePendingBookingUpdate(bookingId, fields)
+
   setData((current) => ({
     ...current,
     bookings: current.bookings.map((booking) =>
