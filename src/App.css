@@ -344,6 +344,27 @@
   gap: 14px;
 }
 
+.pet-card.is-selected {
+  border-color: color-mix(in srgb, var(--forest) 42%, var(--line));
+}
+
+.pet-card-button {
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  margin: 0 0 6px;
+  padding: 0;
+  text-align: left;
+}
+
+.pet-card-button:hover,
+.pet-card-button:focus-visible {
+  color: var(--forest);
+}
+
 .metric-card strong {
   color: var(--ink);
   display: block;
@@ -1124,7 +1145,14 @@ a:focus-visible {
   border-radius: 8px;
   display: grid;
   gap: 8px;
+  margin-top: 10px;
   padding: 12px;
+}
+
+.pet-address-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .slot-list {
@@ -1862,7 +1890,8 @@ tr:last-child td {
 }
 
 .pet-name-chip,
-.pet-mini-list .pet-name-chip {
+.pet-mini-list .pet-name-chip,
+.pet-mini-button {
   align-items: center;
   background: color-mix(
     in srgb,
@@ -1886,6 +1915,17 @@ tr:last-child td {
   font-weight: 800;
   gap: 6px;
   padding: 7px 10px;
+}
+
+.pet-mini-button {
+  cursor: pointer;
+  font: inherit;
+}
+
+.pet-mini-button[aria-pressed='true'] {
+  background: var(--mint);
+  border-color: color-mix(in srgb, var(--forest) 36%, var(--line));
+  color: var(--forest);
 }
 
 .pet-species-icon {
@@ -1996,7 +2036,8 @@ tr:last-child td {
   background: color-mix(in srgb, #fff0ed 88%, transparent);
 }
 
-.dashboard-shell .pet-mini-list > span {
+.dashboard-shell .pet-mini-list > span,
+.dashboard-shell .pet-mini-list > button {
   align-items: center;
   background: color-mix(in srgb, #fff 58%, transparent);
   border: 1px solid color-mix(in srgb, #fff 64%, var(--line));

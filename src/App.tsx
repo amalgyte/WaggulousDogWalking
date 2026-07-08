@@ -10,6 +10,7 @@ import {
   Dog,
   Fish,
   LogOut,
+  MapPin,
   Menu,
   MessageCircle,
   Minus,
@@ -74,6 +75,7 @@ type User = {
   password: string
   role: Role
   address?: string
+  what3words?: string
   phone?: string
   avatar?: string
   canSelfAssign?: boolean
@@ -477,6 +479,7 @@ function mergeSeededUsers(current: User[]) {
       ...user,
       phone: user.phone ?? seeded.phone,
       address: user.address ?? seeded.address,
+      what3words: user.what3words ?? seeded.what3words,
       avatar: user.avatar ?? seeded.avatar,
       canSelfAssign: user.canSelfAssign ?? seeded.canSelfAssign,
       holidays: user.holidays ?? seeded.holidays,
@@ -1263,6 +1266,92 @@ function PetNameChip({ pet }: { pet: Pet }) {
       <PetSpeciesIcon species={pet.species} />
       {pet.name}
     </span>
+  )
+}
+
+function googleMapsSearchUrl(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+    address,
+  )}`
+}
+
+function normaliseWhat3Words(value?: string) {
+  return value?.trim().replace(/^\/{3}/, '') ?? ''
+}
+
+function what3wordsUrl(value: string) {
+  const words = normaliseWhat3Words(value)
+  const path = words.split('.').map(encodeURIComponent).join('.')
+  const hasNonAscii = Array.from(words).some(
+    (character) => character.charCodeAt(0) > 127,
+  )
+  const alias = hasNonAscii
+    ? `?alias=${encodeURIComponent(words)}`
+    : ''
+
+  return `https://what3words.com/${path}${alias}`
+}
+
+function formatWhat3Words(value?: string) {
+  const words = normaliseWhat3Words(value)
+  return words ? `///${words}` : ''
+}
+
+function PetDetailPanel({
+  owner,
+  pet,
+}: {
+  owner?: User
+  pet: Pet
+}) {
+  const address = owner?.address?.trim() ?? ''
+  const what3words = formatWhat3Words(owner?.what3words)
+
+  return (
+    <div className="pet-address-notes">
+      <h4>{pet.name}</h4>
+      <p>
+        {pet.species || 'Pet'} · {pet.breed || 'Breed not set'} · Age{' '}
+        {pet.age || 'not set'}
+      </p>
+      <p>
+        <strong>Owner:</strong> {owner?.name ?? 'Owner not found'}
+        {owner?.phone ? ` · ${owner.phone}` : ''}
+        {owner?.email ? ` · ${owner.email}` : ''}
+      </p>
+      <p>
+        <strong>Address:</strong> {address || 'No address on file'}
+      </p>
+      {(address || what3words) && (
+        <div className="pet-address-actions">
+          {address && (
+            <a
+              className="button ghost"
+              href={googleMapsSearchUrl(address)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <MapPin size={16} />
+              Google Maps
+            </a>
+          )}
+          {what3words && (
+            <a
+              className="button ghost"
+              href={what3wordsUrl(what3words)}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <MapPin size={16} />
+              {what3words}
+            </a>
+          )}
+        </div>
+      )}
+      <p>
+        <strong>Notes:</strong> {pet.notes || 'No notes on file'}
+      </p>
+    </div>
   )
 }
 
@@ -2412,9 +2501,6 @@ function BookingTimeline({
     : []
   const selectedPet =
     selectedBookingPets.find((pet) => pet.id === selectedPetId) ?? null
-  const selectedCustomer = selectedPet
-    ? data.users.find((candidate) => candidate.id === selectedPet.ownerId)
-    : null
   const timelineStartMinute = 6 * 60
   const timelineEndMinute = 22 * 60
   const timelineDayMinutes = timelineEndMinute - timelineStartMinute
@@ -2875,19 +2961,12 @@ function BookingTimeline({
             </div>
           </div>
           {selectedPet && (
-            <div className="pet-address-notes">
-              <h4>{selectedPet.name}</h4>
-              <p>
-                {selectedPet.species} · {selectedPet.breed} · {selectedPet.age}
-              </p>
-              <p>
-                <strong>Address:</strong>{' '}
-                {selectedCustomer?.address ?? 'No address on file'}
-              </p>
-              <p>
-                <strong>Notes:</strong> {selectedPet.notes || 'No notes on file'}
-              </p>
-            </div>
+            <PetDetailPanel
+              owner={data.users.find(
+                (candidate) => candidate.id === selectedPet.ownerId,
+              )}
+              pet={selectedPet}
+            />
           )}
         </div>
       )}
@@ -3045,6 +3124,9 @@ function WalkerDashboard({
         ? 'timeline'
         : 'list',
     )
+  const [selectedPetByBookingId, setSelectedPetByBookingId] = useState<
+    Record<string, string>
+  >({})
   const today = formatDateInputValue()
   const claimWindowEnd = addDaysInputValue(today, 7)
   const navItems: [typeof tab, string][] = user.canSelfAssign
@@ -3176,6 +3258,8 @@ function WalkerDashboard({
       (candidate) => candidate.id === booking.customerId,
     )
     const pets = data.pets.filter((pet) => booking.petIds.includes(pet.id))
+    const selectedPet =
+      pets.find((pet) => pet.id === selectedPetByBookingId[booking.id]) ?? null
 
     return (
       <article className="booking-row" key={booking.id}>
@@ -3190,12 +3274,31 @@ function WalkerDashboard({
           </p>
           <div className="pet-mini-list">
             {pets.map((pet) => (
-              <span key={pet.id}>
+              <button
+                aria-pressed={selectedPet?.id === pet.id}
+                className="pet-mini-button"
+                key={pet.id}
+                type="button"
+                onClick={() =>
+                  setSelectedPetByBookingId((current) => ({
+                    ...current,
+                    [booking.id]: current[booking.id] === pet.id ? '' : pet.id,
+                  }))
+                }
+              >
                 <PetSpeciesIcon species={pet.species} />
                 {pet.name}
-              </span>
+              </button>
             ))}
           </div>
+          {selectedPet && (
+            <PetDetailPanel
+              owner={data.users.find(
+                (candidate) => candidate.id === selectedPet.ownerId,
+              )}
+              pet={selectedPet}
+            />
+          )}
           <p className="muted">
             Pickup: {formatDateTime(booking.pickedUpAt)} · Return:{' '}
             {formatDateTime(booking.returnedAt)}
@@ -3487,6 +3590,7 @@ function ClientBookingPanel({
     password: 'Temp123!',
     phone: '',
     address: '',
+    what3words: '',
   })
   const [clientPetDraft, setClientPetDraft] = useState({
     name: '',
@@ -3650,6 +3754,7 @@ function ClientBookingPanel({
       role: 'customer',
       phone: clientDraft.phone.trim(),
       address: clientDraft.address.trim(),
+      what3words: normaliseWhat3Words(clientDraft.what3words),
     }
     const newPets: Pet[] = petsToSave.map((pet) => ({
       id: makeId('p'),
@@ -3679,6 +3784,7 @@ function ClientBookingPanel({
       password: 'Temp123!',
       phone: '',
       address: '',
+      what3words: '',
     })
     setClientPets([])
     resetClientPetDraft()
@@ -4043,6 +4149,19 @@ function ClientBookingPanel({
                 })
               }
               placeholder="Home address"
+            />
+          </label>
+          <label>
+            what3words
+            <input
+              value={clientDraft.what3words}
+              onChange={(event) =>
+                setClientDraft({
+                  ...clientDraft,
+                  what3words: event.target.value,
+                })
+              }
+              placeholder="///filled.count.soap"
             />
           </label>
           <section className="wide inline-section">
@@ -5502,6 +5621,32 @@ function AccountSecurityPanel({
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
+  const [contactSaved, setContactSaved] = useState(false)
+  const [contactDraft, setContactDraft] = useState({
+    phone: user.phone ?? '',
+    address: user.address ?? '',
+    what3words: formatWhat3Words(user.what3words),
+  })
+
+  function saveContactDetails(event: FormEvent) {
+    event.preventDefault()
+    setContactSaved(false)
+
+    setData({
+      ...data,
+      users: data.users.map((candidate) =>
+        candidate.id === user.id
+          ? {
+              ...candidate,
+              phone: contactDraft.phone.trim(),
+              address: contactDraft.address.trim(),
+              what3words: normaliseWhat3Words(contactDraft.what3words),
+            }
+          : candidate,
+      ),
+    })
+    setContactSaved(true)
+  }
 
   function changePassword(event: FormEvent) {
     event.preventDefault()
@@ -5556,9 +5701,50 @@ function AccountSecurityPanel({
         <div>
           <h3>{user.name}</h3>
           <p>{user.email}</p>
-          <p className="muted">{user.role}</p>
+          <p className="muted">
+            {user.phone || 'No phone'} · {user.address || 'No address'}
+          </p>
         </div>
       </div>
+      <form className="form-grid" onSubmit={saveContactDetails}>
+        <label>
+          Phone
+          <input
+            value={contactDraft.phone}
+            onChange={(event) =>
+              setContactDraft({ ...contactDraft, phone: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          what3words
+          <input
+            value={contactDraft.what3words}
+            onChange={(event) =>
+              setContactDraft({
+                ...contactDraft,
+                what3words: event.target.value,
+              })
+            }
+            placeholder="///filled.count.soap"
+          />
+        </label>
+        <label className="wide">
+          Address
+          <textarea
+            value={contactDraft.address}
+            onChange={(event) =>
+              setContactDraft({ ...contactDraft, address: event.target.value })
+            }
+          />
+        </label>
+        {contactSaved && (
+          <p className="form-success wide">Contact details saved.</p>
+        )}
+        <button className="button secondary" type="submit">
+          Save contact details
+        </button>
+      </form>
       <form className="form-grid" onSubmit={changePassword}>
         <label>
           Current password
@@ -6105,6 +6291,7 @@ function PetsPanel({
   customer: User
   pets: Pet[]
 }) {
+  const [selectedPetId, setSelectedPetId] = useState<string | null>(null)
   const [draft, setDraft] = useState({
     name: '',
     species: '',
@@ -6217,7 +6404,12 @@ function PetsPanel({
 
       <div className="pet-grid">
         {pets.map((pet) => (
-          <article className="pet-card" key={pet.id}>
+          <article
+            className={
+              selectedPetId === pet.id ? 'pet-card is-selected' : 'pet-card'
+            }
+            key={pet.id}
+          >
             <div className="pet-photo">
               {pet.photo ? (
                 <img src={pet.photo} alt={pet.name} />
@@ -6226,15 +6418,27 @@ function PetsPanel({
               )}
             </div>
             <div>
-              <h3 className="pet-card-title">
+              <button
+                aria-expanded={selectedPetId === pet.id}
+                className="pet-card-title pet-card-button"
+                type="button"
+                onClick={() =>
+                  setSelectedPetId((current) =>
+                    current === pet.id ? null : pet.id,
+                  )
+                }
+              >
                 <PetSpeciesIcon species={pet.species} size={18} />
                 {pet.name}
-              </h3>
+              </button>
               <p>
                 {pet.species} · {pet.breed || 'Breed not set'} · Age{' '}
                 {pet.age || 'not set'}
               </p>
               <p className="muted">{pet.notes || 'No care notes yet.'}</p>
+              {selectedPetId === pet.id && (
+                <PetDetailPanel owner={customer} pet={pet} />
+              )}
             </div>
           </article>
         ))}

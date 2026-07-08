@@ -105,6 +105,7 @@ async function seedWorkflowData(page: Page) {
             role: 'customer',
             phone: '07700 900101',
             address: '12 River Walk, Bristol',
+            what3words: 'filled.count.soap',
           },
           {
             id: 'u-maya',
@@ -714,7 +715,7 @@ test('walker jobs are filtered by date with completed jobs separated', async ({
   const staffTimeline = page.locator('.staff-jobs-timeline')
   await expect(staffTimeline).toBeVisible()
   await expect(
-    staffTimeline.getByRole('button', { name: /Mabel/i }),
+    staffTimeline.locator('.staff-jobs-timeline-card').filter({ hasText: 'Mabel' }),
   ).toBeVisible()
   await expect(staffTimeline.locator('article').filter({ hasText: 'Mabel' })).toBeVisible()
 
@@ -897,7 +898,25 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
   await page.getByLabel('Breed').fill('Labrador')
   await page.getByLabel('Age').fill('2')
   await page.getByRole('button', { name: /add pet/i }).click()
-  await expect(page.getByRole('heading', { name: 'Bertie' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Bertie' })).toBeVisible()
+  await page.getByRole('button', { name: 'Bertie' }).click()
+  await expect(page.locator('.pet-address-notes')).toContainText('Sam Taylor')
+  await expect(page.locator('.pet-address-notes')).toContainText(
+    '12 River Walk, Bristol',
+  )
+  await expect(
+    page.locator('.pet-address-notes').getByRole('link', {
+      name: /google maps/i,
+    }),
+  ).toHaveAttribute(
+    'href',
+    /google\.com\/maps\/search\/\?api=1&query=12%20River%20Walk/,
+  )
+  await expect(
+    page.locator('.pet-address-notes').getByRole('link', {
+      name: '///filled.count.soap',
+    }),
+  ).toHaveAttribute('href', 'https://what3words.com/filled.count.soap')
 
   await page.getByRole('button', { name: 'Request' }).click()
   await page.getByLabel('Service').selectOption('s-pop-in')
@@ -963,6 +982,7 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
   await page.getByRole('button', { name: 'Clients' }).click()
   await page.getByLabel('Client name').fill('Nina Verbal')
   await page.getByLabel('Client email').fill('nina.verbal@example.com')
+  await page.getByLabel('what3words').fill('///index.home.raft')
   await page.getByLabel('Pet name').fill('Scout')
   await page.getByLabel('Breed').fill('Beagle')
   await page.getByRole('button', { name: /add another pet/i }).click()
@@ -1035,6 +1055,17 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
   ).toContainText('approved')
+  await page
+    .locator('article')
+    .filter({ hasText: 'Bertie' })
+    .getByRole('button', { name: 'Bertie' })
+    .click()
+  await expect(
+    page.locator('article').filter({ hasText: 'Bertie' }),
+  ).toContainText('Sam Taylor')
+  await expect(
+    page.locator('article').filter({ hasText: 'Bertie' }),
+  ).toContainText('12 River Walk, Bristol')
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
   ).toHaveCount(1)
@@ -1454,6 +1485,15 @@ test('owner bookings open in an interactive staff timeline', async ({ page }) =>
     .getByRole('button', { name: 'View Mabel details' })
     .click()
   await expect(timeline).toContainText('12 River Walk, Bristol')
+  await expect(
+    timeline.getByRole('link', { name: /google maps/i }),
+  ).toHaveAttribute(
+    'href',
+    /google\.com\/maps\/search\/\?api=1&query=12%20River%20Walk/,
+  )
+  await expect(
+    timeline.getByRole('link', { name: '///filled.count.soap' }),
+  ).toHaveAttribute('href', 'https://what3words.com/filled.count.soap')
   await expect(timeline).toContainText(
     'Loves woodland routes, nervous around scooters.',
   )
