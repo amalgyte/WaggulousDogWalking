@@ -14,8 +14,11 @@ export type OfflineBooking = {
 }
 
 export type PendingBookingUpdateFields = Partial<
-  Pick<OfflineBooking, 'pickedUpAt' | 'returnedAt' | 'status'>
->
+  Pick<OfflineBooking, 'status'>
+> & {
+  pickedUpAt?: string | null
+  returnedAt?: string | null
+}
 
 export type PendingBookingUpdate = {
   bookingId: string
@@ -31,7 +34,7 @@ const terminalStatuses = new Set<OfflineBookingStatus>([
 ])
 
 export function getPendingBookingUpdateFields(
-  fields: Partial<OfflineBooking>,
+  fields: PendingBookingUpdateFields,
 ): PendingBookingUpdateFields {
   const pendingFields: PendingBookingUpdateFields = {}
 
@@ -39,11 +42,23 @@ export function getPendingBookingUpdateFields(
     pendingFields.pickedUpAt = fields.pickedUpAt
   }
 
+  if (fields.pickedUpAt === null) {
+    pendingFields.pickedUpAt = null
+  }
+
   if (typeof fields.returnedAt === 'string' && fields.returnedAt) {
     pendingFields.returnedAt = fields.returnedAt
   }
 
-  if (fields.status === 'in-progress' || fields.status === 'completed') {
+  if (fields.returnedAt === null) {
+    pendingFields.returnedAt = null
+  }
+
+  if (
+    fields.status === 'approved' ||
+    fields.status === 'in-progress' ||
+    fields.status === 'completed'
+  ) {
     pendingFields.status = fields.status
   }
 
@@ -98,7 +113,7 @@ export function savePendingBookingUpdates(
 
 export function queuePendingBookingUpdate(
   bookingId: string,
-  fields: Partial<OfflineBooking>,
+  fields: PendingBookingUpdateFields,
   storage: Pick<Storage, 'getItem' | 'removeItem' | 'setItem'> = localStorage,
   updatedAt = new Date().toISOString(),
 ) {
@@ -156,9 +171,34 @@ export function reconcilePendingBookingUpdates<
     ...data,
     bookings: data.bookings.map((booking) => {
       const pendingFields = updatesByBookingId.get(booking.id)
-      return pendingFields ? { ...booking, ...pendingFields } : booking
+      return pendingFields ? applyPendingFields(booking, pendingFields) : booking
     }),
   }
+}
+
+function applyPendingFields<TBooking extends OfflineBooking>(
+  booking: TBooking,
+  fields: PendingBookingUpdateFields,
+): TBooking {
+  const nextBooking = { ...booking }
+
+  if (fields.status) {
+    nextBooking.status = fields.status
+  }
+
+  if (typeof fields.pickedUpAt === 'string') {
+    nextBooking.pickedUpAt = fields.pickedUpAt
+  } else if (fields.pickedUpAt === null) {
+    delete nextBooking.pickedUpAt
+  }
+
+  if (typeof fields.returnedAt === 'string') {
+    nextBooking.returnedAt = fields.returnedAt
+  } else if (fields.returnedAt === null) {
+    delete nextBooking.returnedAt
+  }
+
+  return nextBooking
 }
 
 function getFieldsToApply(
@@ -166,6 +206,23 @@ function getFieldsToApply(
   fields: PendingBookingUpdateFields,
 ): PendingBookingUpdateFields {
   const fieldsToApply: PendingBookingUpdateFields = {}
+
+  if (
+    fields.pickedUpAt === null &&
+    booking.pickedUpAt &&
+    !booking.returnedAt &&
+    !terminalStatuses.has(booking.status)
+  ) {
+    fieldsToApply.pickedUpAt = null
+  }
+
+  if (
+    fields.returnedAt === null &&
+    booking.returnedAt &&
+    !terminalStatuses.has(booking.status)
+  ) {
+    fieldsToApply.returnedAt = null
+  }
 
   if (fields.pickedUpAt && !booking.pickedUpAt) {
     fieldsToApply.pickedUpAt = fields.pickedUpAt
@@ -185,6 +242,14 @@ function getFieldsToApply(
 
   if (fields.status === 'in-progress' && booking.status === 'approved') {
     fieldsToApply.status = 'in-progress'
+  }
+
+  if (
+    fields.status === 'approved' &&
+    booking.status === 'in-progress' &&
+    !booking.returnedAt
+  ) {
+    fieldsToApply.status = 'approved'
   }
 
   return fieldsToApply

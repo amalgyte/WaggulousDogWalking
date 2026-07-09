@@ -3320,6 +3320,15 @@ function WalkerDashboard({
             Picked up
           </button>
           <button
+            className="button secondary"
+            type="button"
+            disabled={!booking.pickedUpAt || Boolean(booking.returnedAt)}
+            onClick={() => resetBookingPickup(setData, booking.id)}
+          >
+            <X size={16} />
+            Picked up in error
+          </button>
+          <button
             className="button primary"
             type="button"
             disabled={!booking.pickedUpAt || Boolean(booking.returnedAt)}
@@ -8321,6 +8330,33 @@ function stampBooking(
     bookings: current.bookings.map((booking) =>
       booking.id === bookingId ? { ...booking, ...fields } : booking,
     ),
+  }))
+}
+
+function resetBookingPickup(
+  setData: Dispatch<SetStateAction<AppData>>,
+  bookingId: string,
+) {
+  queuePendingBookingUpdate(bookingId, {
+    pickedUpAt: null,
+    returnedAt: null,
+    status: 'approved',
+  })
+
+  setData((current) => ({
+    ...current,
+    bookings: current.bookings.map((booking) => {
+      if (booking.id !== bookingId) return booking
+
+      const nextBooking = { ...booking }
+      delete nextBooking.pickedUpAt
+      delete nextBooking.returnedAt
+
+      return {
+        ...nextBooking,
+        status: 'approved',
+      }
+    }),
   }))
 }
 

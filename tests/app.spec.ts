@@ -745,7 +745,18 @@ test('admin confirms cash received by staff into the company account', async ({
   await loginWithEmail(page, 'walker@waggulous.local')
 
   const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
-  await mabelJob.getByRole('button', { name: /picked up/i }).click()
+  await mabelJob.getByRole('button', { name: /^picked up$/i }).click()
+  await expect(mabelJob).toContainText('in progress')
+  await expect(
+    mabelJob.getByRole('button', { name: /picked up in error/i }),
+  ).toBeEnabled()
+  await mabelJob.getByRole('button', { name: /picked up in error/i }).click()
+  await expect(mabelJob).toContainText('approved')
+  await expect(
+    mabelJob.getByRole('button', { name: /^picked up$/i }),
+  ).toBeEnabled()
+  await expect(mabelJob.getByRole('button', { name: /returned/i })).toBeDisabled()
+  await mabelJob.getByRole('button', { name: /^picked up$/i }).click()
   await mabelJob.getByRole('button', { name: /returned/i }).click()
   await mabelJob.getByLabel('Payment received').fill('14')
   await mabelJob.getByLabel('Method').selectOption('cash')
@@ -827,7 +838,7 @@ test('admin can remove a staff-entered payment added in error', async ({
   await loginWithEmail(page, 'walker@waggulous.local')
 
   const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
-  await mabelJob.getByRole('button', { name: /picked up/i }).click()
+  await mabelJob.getByRole('button', { name: /^picked up$/i }).click()
   await mabelJob.getByRole('button', { name: /returned/i }).click()
   await mabelJob.getByLabel('Payment received').fill('14')
   await mabelJob.getByLabel('Method').selectOption('cash')
@@ -1050,7 +1061,7 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
     page
       .locator('article')
       .filter({ hasText: 'Bertie' })
-      .getByRole('button', { name: /picked up/i }),
+      .getByRole('button', { name: /^picked up$/i }),
   ).toBeDisabled()
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
@@ -1155,7 +1166,7 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
   await page
     .locator('article')
     .filter({ hasText: 'Mabel' })
-    .getByRole('button', { name: /picked up/i })
+    .getByRole('button', { name: /^picked up$/i })
     .click()
   await expect(page.getByText('in progress')).toBeVisible()
 })
