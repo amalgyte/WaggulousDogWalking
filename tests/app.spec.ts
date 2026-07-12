@@ -826,6 +826,102 @@ test('staff can manually book services and manage active client pets', async ({
   expect(staffClientState.removedPet.removedAt).toEqual(expect.any(String))
 })
 
+test('admin can delegate service and payment admin functions to staff', async ({
+  page,
+}) => {
+  await loginWithEmail(page, 'admin@waggulous.com')
+  await page.getByRole('button', { name: 'Staff' }).click()
+
+  const alexStaff = page
+    .locator('.staff-list article')
+    .filter({ hasText: 'walker@waggulous.local' })
+  await alexStaff.getByLabel('Can manage services and prices').check()
+  await alexStaff
+    .getByLabel('Can approve staff payments into the business')
+    .check()
+
+  await page.getByRole('button', { name: /sign out/i }).click()
+  await loginWithEmail(page, 'walker@waggulous.local')
+  await expect(page.getByRole('button', { name: 'Services' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Payments' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Services' }).click()
+  const addServiceForm = page.locator('form').filter({ hasText: 'Add service' })
+  await addServiceForm.getByLabel('Name').fill('Overnight cat sitting')
+  await addServiceForm.getByLabel('Type').selectOption('sitting')
+  await addServiceForm.getByLabel('Duration').fill('Overnight')
+  await addServiceForm.getByLabel('Price').fill('48')
+  await addServiceForm
+    .getByLabel('Description')
+    .fill('Evening, overnight, and breakfast cat sitting.')
+  await addServiceForm.getByRole('button', { name: /add service/i }).click()
+  await expect(
+    page.locator('.service-admin-row').filter({
+      hasText: 'Overnight cat sitting',
+    }),
+  ).toContainText('sitting')
+
+  await page.getByRole('button', { name: 'Jobs' }).click()
+  const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
+  await mabelJob.getByRole('button', { name: /^picked up$/i }).click()
+  await mabelJob.getByRole('button', { name: /returned/i }).click()
+  await mabelJob.getByLabel('Payment received').fill('14')
+  await mabelJob.getByLabel('Method').selectOption('cash')
+  await mabelJob.getByRole('button', { name: /mark received/i }).click()
+  await expect(mabelJob).toContainText('Pending cash payment')
+
+  await page.getByRole('button', { name: 'Payments' }).click()
+  const pendingPayment = page
+    .locator('.pending-payment-row')
+    .filter({ hasText: 'Sam Taylor' })
+  await expect(pendingPayment).toContainText('recorded by Alex Walker')
+  await expect(
+    pendingPayment.getByRole('button', { name: /remove payment/i }),
+  ).toHaveCount(0)
+  await pendingPayment
+    .getByRole('button', { name: /confirm into company account/i })
+    .click()
+  await expect(page.getByRole('status')).toContainText(
+    'Staff payment confirmed into the company account.',
+  )
+
+  const delegatedAdminState = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return {
+      service: data.services.find(
+        (service: { name: string }) =>
+          service.name === 'Overnight cat sitting',
+      ),
+      payment: data.transactions.find(
+        (transaction: {
+          bookingId?: string
+          status?: string
+          confirmedById?: string
+        }) =>
+          transaction.bookingId === 'b-1' &&
+          transaction.status === 'paid' &&
+          transaction.confirmedById === 'u-walker',
+      ),
+      staff: data.users.find(
+        (user: { id: string }) => user.id === 'u-walker',
+      ),
+    }
+  })
+  expect(delegatedAdminState.staff).toMatchObject({
+    canManageServices: true,
+    canConfirmPayments: true,
+  })
+  expect(delegatedAdminState.service).toMatchObject({
+    name: 'Overnight cat sitting',
+    type: 'sitting',
+    price: 48,
+  })
+  expect(delegatedAdminState.payment).toMatchObject({
+    status: 'paid',
+    confirmedById: 'u-walker',
+  })
+})
+
 test('admin confirms cash received by staff into the company account', async ({
   page,
 }) => {

@@ -79,6 +79,8 @@ type User = {
   phone?: string
   avatar?: string
   canSelfAssign?: boolean
+  canManageServices?: boolean
+  canConfirmPayments?: boolean
   holidays?: StaffHoliday[]
 }
 
@@ -484,6 +486,8 @@ function mergeSeededUsers(current: User[]) {
       what3words: user.what3words ?? seeded.what3words,
       avatar: user.avatar ?? seeded.avatar,
       canSelfAssign: user.canSelfAssign ?? seeded.canSelfAssign,
+      canManageServices: user.canManageServices ?? seeded.canManageServices,
+      canConfirmPayments: user.canConfirmPayments ?? seeded.canConfirmPayments,
       holidays: user.holidays ?? seeded.holidays,
     }
   })
@@ -1497,6 +1501,14 @@ function resetScroll() {
 
 function userIsAdmin(user: User) {
   return user.role === 'admin' || user.role === 'owner'
+}
+
+function userCanManageServices(user: User) {
+  return userIsAdmin(user) || Boolean(user.canManageServices)
+}
+
+function userCanConfirmPayments(user: User) {
+  return userIsAdmin(user) || Boolean(user.canConfirmPayments)
 }
 
 function App() {
@@ -3120,7 +3132,14 @@ function WalkerDashboard({
   user: User
 }) {
   const [tab, setTab] = useState<
-    'jobs' | 'clients' | 'profile' | 'holidays' | 'chat' | 'account'
+    | 'jobs'
+    | 'clients'
+    | 'payments'
+    | 'services'
+    | 'profile'
+    | 'holidays'
+    | 'chat'
+    | 'account'
   >('jobs')
   const [selectedJobDate, setSelectedJobDate] = useState(() =>
     formatDateInputValue(),
@@ -3137,22 +3156,16 @@ function WalkerDashboard({
   >({})
   const today = formatDateInputValue()
   const claimWindowEnd = addDaysInputValue(today, 7)
-  const navItems: [typeof tab, string][] = user.canSelfAssign
-    ? [
-        ['jobs', 'Jobs'],
-        ['clients', 'Clients'],
-        ['chat', 'Messages'],
-        ['profile', 'Profile'],
-        ['holidays', 'Holidays'],
-        ['account', 'Account'],
-      ]
-    : [
-        ['jobs', 'Jobs'],
-        ['chat', 'Messages'],
-        ['profile', 'Profile'],
-        ['holidays', 'Holidays'],
-        ['account', 'Account'],
-      ]
+  const navItems: [typeof tab, string][] = [['jobs', 'Jobs']]
+  if (user.canSelfAssign) navItems.push(['clients', 'Clients'])
+  if (userCanConfirmPayments(user)) navItems.push(['payments', 'Payments'])
+  if (userCanManageServices(user)) navItems.push(['services', 'Services'])
+  navItems.push(
+    ['chat', 'Messages'],
+    ['profile', 'Profile'],
+    ['holidays', 'Holidays'],
+    ['account', 'Account'],
+  )
   const assignedBookings = data.bookings
     .filter(
       (booking) =>
@@ -3356,7 +3369,7 @@ function WalkerDashboard({
           data={data}
           setData={setData}
           user={user}
-          canConfirm={false}
+          canConfirm={userCanConfirmPayments(user)}
         />
       </article>
     )
@@ -3560,6 +3573,14 @@ function WalkerDashboard({
 
       {tab === 'clients' && user.canSelfAssign && (
         <ClientBookingPanel data={data} setData={setData} user={user} />
+      )}
+
+      {tab === 'payments' && userCanConfirmPayments(user) && (
+        <StaffPaymentApprovalPanel data={data} setData={setData} user={user} />
+      )}
+
+      {tab === 'services' && userCanManageServices(user) && (
+        <ServicesPanel data={data} setData={setData} />
       )}
 
       {tab === 'chat' && (
@@ -4964,6 +4985,97 @@ function ClientBookingPanel({
   )
 }
 
+function StaffPaymentApprovalPanel({
+  data,
+  setData,
+  user,
+}: {
+  data: AppData
+  setData: Dispatch<SetStateAction<AppData>>
+  user: User
+}) {
+  const [successMessage, setSuccessMessage] = useState('')
+  const pendingStaffPayments = data.transactions
+    .filter((transaction) => transaction.status === 'payment-pending')
+    .sort(
+      (a, b) =>
+        (b.createdAt ?? b.date).localeCompare(a.createdAt ?? a.date) ||
+        b.date.localeCompare(a.date),
+    )
+
+  function confirmStaffPayment(transactionId: string) {
+    confirmPendingPayment(setData, transactionId, user.id)
+    setSuccessMessage('Staff payment confirmed into the company account.')
+  }
+
+  return (
+    <section className="workspace">
+      <WorkspaceTitle
+        eyebrow="Staff payments"
+        title="Confirm received payments into the business."
+      />
+      {pendingStaffPayments.length === 0 ? (
+        <div className="empty-state">
+          <h3>No staff payments awaiting confirmation.</h3>
+          <p>
+            Cash or other payments marked received by staff will appear here for
+            confirmation.
+          </p>
+        </div>
+      ) : (
+        <div className="payment-pending-list">
+          {pendingStaffPayments.map((payment) => {
+            const booking = data.bookings.find(
+              (candidate) => candidate.id === payment.bookingId,
+            )
+            const customer = data.users.find(
+              (candidate) => candidate.id === payment.customerId,
+            )
+            const recorder = data.users.find(
+              (candidate) => candidate.id === payment.recordedById,
+            )
+            const service = booking
+              ? data.services.find(
+                  (candidate) => candidate.id === booking.serviceId,
+                )
+              : undefined
+
+            return (
+              <div className="pending-payment-row" key={payment.id}>
+                <span>
+                  Pending {payment.method ?? 'other'} payment ·{' '}
+                  {formatMoney(payment.amount)} · {customer?.name ?? 'Client'}{' '}
+                  {booking
+                    ? `· ${service?.name ?? 'Service'} on ${formatDate(
+                        booking.date,
+                      )}`
+                    : ''}
+                  {recorder ? ` · recorded by ${recorder.name}` : ''}
+                </span>
+                <div className="row-actions">
+                  <button
+                    className="button primary"
+                    type="button"
+                    onClick={() => confirmStaffPayment(payment.id)}
+                  >
+                    <Check size={16} />
+                    Confirm into company account
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      {successMessage && (
+        <p className="form-success wide" role="status">
+          {successMessage}
+        </p>
+      )}
+    </section>
+  )
+}
+
 function PaymentsAdminPanel({
   data,
   setData,
@@ -5505,6 +5617,8 @@ function StaffAdminPanel({
     address: '',
     avatar: '',
     canSelfAssign: false,
+    canManageServices: false,
+    canConfirmPayments: false,
   })
   const selectedStaff =
     staff.find((member) => member.id === selectedStaffId) ?? staff[0]
@@ -5544,6 +5658,8 @@ function StaffAdminPanel({
       address: draft.address.trim(),
       avatar: draft.avatar || undefined,
       canSelfAssign: draft.canSelfAssign,
+      canManageServices: draft.canManageServices,
+      canConfirmPayments: draft.canConfirmPayments,
       holidays: [],
     }
 
@@ -5560,6 +5676,8 @@ function StaffAdminPanel({
       address: '',
       avatar: '',
       canSelfAssign: false,
+      canManageServices: false,
+      canConfirmPayments: false,
     })
   }
 
@@ -5608,6 +5726,15 @@ function StaffAdminPanel({
               walkerId: walkerId || undefined,
             }
           : booking,
+      ),
+    }))
+  }
+
+  function updateStaffPermission(memberId: string, updates: Partial<User>) {
+    setData((current) => ({
+      ...current,
+      users: current.users.map((candidate) =>
+        candidate.id === memberId ? { ...candidate, ...updates } : candidate,
       ),
     }))
   }
@@ -5683,6 +5810,26 @@ function StaffAdminPanel({
           />
           Can claim unassigned appointments
         </label>
+        <label className="toggle-label wide">
+          <input
+            type="checkbox"
+            checked={draft.canManageServices}
+            onChange={(event) =>
+              setDraft({ ...draft, canManageServices: event.target.checked })
+            }
+          />
+          Can manage services and prices
+        </label>
+        <label className="toggle-label wide">
+          <input
+            type="checkbox"
+            checked={draft.canConfirmPayments}
+            onChange={(event) =>
+              setDraft({ ...draft, canConfirmPayments: event.target.checked })
+            }
+          />
+          Can approve staff payments into the business
+        </label>
         {error && <p className="form-error wide">{error}</p>}
         {resetMessage && (
           <p className="form-success wide" role="status">
@@ -5721,20 +5868,36 @@ function StaffAdminPanel({
                     type="checkbox"
                     checked={Boolean(member.canSelfAssign)}
                     onChange={(event) =>
-                      setData((current) => ({
-                        ...current,
-                        users: current.users.map((candidate) =>
-                          candidate.id === member.id
-                            ? {
-                                ...candidate,
-                                canSelfAssign: event.target.checked,
-                              }
-                            : candidate,
-                        ),
-                      }))
+                      updateStaffPermission(member.id, {
+                        canSelfAssign: event.target.checked,
+                      })
                     }
                   />
                   Can claim unassigned appointments
+                </label>
+                <label className="toggle-label staff-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(member.canManageServices)}
+                    onChange={(event) =>
+                      updateStaffPermission(member.id, {
+                        canManageServices: event.target.checked,
+                      })
+                    }
+                  />
+                  Can manage services and prices
+                </label>
+                <label className="toggle-label staff-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(member.canConfirmPayments)}
+                    onChange={(event) =>
+                      updateStaffPermission(member.id, {
+                        canConfirmPayments: event.target.checked,
+                      })
+                    }
+                  />
+                  Can approve staff payments into the business
                 </label>
                 <button
                   className="button ghost staff-toggle"
@@ -5775,6 +5938,18 @@ function StaffAdminPanel({
                   {selectedStaff.canSelfAssign
                     ? 'Can claim unassigned appointments'
                     : 'Cannot claim unassigned appointments'}
+                </p>
+                <p className="muted">
+                  {[
+                    selectedStaff.canManageServices
+                      ? 'Can manage services and prices'
+                      : '',
+                    selectedStaff.canConfirmPayments
+                      ? 'Can approve staff payments'
+                      : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || 'No delegated admin permissions'}
                 </p>
                 <button
                   className="button ghost staff-toggle"
