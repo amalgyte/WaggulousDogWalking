@@ -11,6 +11,9 @@ export type OfflineBooking = {
   status: OfflineBookingStatus
   pickedUpAt?: string
   returnedAt?: string
+  serviceCompletionNote?: string
+  serviceCompletedById?: string
+  serviceCompletedMessageId?: string
 }
 
 export type PendingBookingUpdateFields = Partial<
@@ -18,6 +21,9 @@ export type PendingBookingUpdateFields = Partial<
 > & {
   pickedUpAt?: string | null
   returnedAt?: string | null
+  serviceCompletionNote?: string | null
+  serviceCompletedById?: string | null
+  serviceCompletedMessageId?: string | null
 }
 
 export type PendingBookingUpdate = {
@@ -52,6 +58,36 @@ export function getPendingBookingUpdateFields(
 
   if (fields.returnedAt === null) {
     pendingFields.returnedAt = null
+  }
+
+  if (typeof fields.serviceCompletionNote === 'string') {
+    pendingFields.serviceCompletionNote = fields.serviceCompletionNote
+  }
+
+  if (fields.serviceCompletionNote === null) {
+    pendingFields.serviceCompletionNote = null
+  }
+
+  if (
+    typeof fields.serviceCompletedById === 'string' &&
+    fields.serviceCompletedById
+  ) {
+    pendingFields.serviceCompletedById = fields.serviceCompletedById
+  }
+
+  if (fields.serviceCompletedById === null) {
+    pendingFields.serviceCompletedById = null
+  }
+
+  if (
+    typeof fields.serviceCompletedMessageId === 'string' &&
+    fields.serviceCompletedMessageId
+  ) {
+    pendingFields.serviceCompletedMessageId = fields.serviceCompletedMessageId
+  }
+
+  if (fields.serviceCompletedMessageId === null) {
+    pendingFields.serviceCompletedMessageId = null
   }
 
   if (
@@ -198,6 +234,24 @@ function applyPendingFields<TBooking extends OfflineBooking>(
     delete nextBooking.returnedAt
   }
 
+  if (typeof fields.serviceCompletionNote === 'string') {
+    nextBooking.serviceCompletionNote = fields.serviceCompletionNote
+  } else if (fields.serviceCompletionNote === null) {
+    delete nextBooking.serviceCompletionNote
+  }
+
+  if (typeof fields.serviceCompletedById === 'string') {
+    nextBooking.serviceCompletedById = fields.serviceCompletedById
+  } else if (fields.serviceCompletedById === null) {
+    delete nextBooking.serviceCompletedById
+  }
+
+  if (typeof fields.serviceCompletedMessageId === 'string') {
+    nextBooking.serviceCompletedMessageId = fields.serviceCompletedMessageId
+  } else if (fields.serviceCompletedMessageId === null) {
+    delete nextBooking.serviceCompletedMessageId
+  }
+
   return nextBooking
 }
 
@@ -230,6 +284,54 @@ function getFieldsToApply(
 
   if (fields.returnedAt && !booking.returnedAt) {
     fieldsToApply.returnedAt = fields.returnedAt
+  }
+
+  if (
+    typeof fields.serviceCompletionNote === 'string' &&
+    fields.serviceCompletionNote !== booking.serviceCompletionNote &&
+    !terminalStatuses.has(booking.status)
+  ) {
+    fieldsToApply.serviceCompletionNote = fields.serviceCompletionNote
+  }
+
+  if (
+    fields.serviceCompletionNote === null &&
+    booking.serviceCompletionNote &&
+    !terminalStatuses.has(booking.status)
+  ) {
+    fieldsToApply.serviceCompletionNote = null
+  }
+
+  if (
+    fields.serviceCompletedById &&
+    fields.serviceCompletedById !== booking.serviceCompletedById &&
+    !terminalStatuses.has(booking.status)
+  ) {
+    fieldsToApply.serviceCompletedById = fields.serviceCompletedById
+  }
+
+  if (
+    fields.serviceCompletedById === null &&
+    booking.serviceCompletedById &&
+    !terminalStatuses.has(booking.status)
+  ) {
+    fieldsToApply.serviceCompletedById = null
+  }
+
+  if (
+    fields.serviceCompletedMessageId &&
+    fields.serviceCompletedMessageId !== booking.serviceCompletedMessageId &&
+    !terminalStatuses.has(booking.status)
+  ) {
+    fieldsToApply.serviceCompletedMessageId = fields.serviceCompletedMessageId
+  }
+
+  if (
+    fields.serviceCompletedMessageId === null &&
+    booking.serviceCompletedMessageId &&
+    !terminalStatuses.has(booking.status)
+  ) {
+    fieldsToApply.serviceCompletedMessageId = null
   }
 
   if (

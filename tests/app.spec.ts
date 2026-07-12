@@ -674,7 +674,9 @@ test('owner can reset a staff password with a generated handover code', async ({
 
   await loginWithEmail(page, 'walker@waggulous.local', generatedPassword)
   await expect(
-    page.getByRole('heading', { name: /log pickup and return/i }),
+    page.getByRole('heading', {
+      name: /log service start and completion/i,
+    }),
   ).toBeVisible()
 })
 
@@ -705,7 +707,7 @@ test('walker jobs are filtered by date with completed jobs separated', async ({
     activeJobs.locator('article').filter({ hasText: 'Pip' }),
   ).toHaveCount(0)
   const completedJobs = page.locator('section.nested-workspace').filter({
-    hasText: 'Jobs completed on 18 Jun 2026.',
+    hasText: 'Services completed on 18 Jun 2026.',
   })
   await expect(completedJobs.locator('article').filter({ hasText: 'Pip' })).toBeVisible()
   await expect(completedJobs).toContainText('completed')
@@ -863,8 +865,12 @@ test('admin can delegate service and payment admin functions to staff', async ({
 
   await page.getByRole('button', { name: 'Jobs' }).click()
   const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
-  await mabelJob.getByRole('button', { name: /^picked up$/i }).click()
-  await mabelJob.getByRole('button', { name: /returned/i }).click()
+  await mabelJob.getByRole('button', { name: /^service started$/i }).click()
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('completion note')
+    await dialog.accept('Delegated admin completion note.')
+  })
+  await mabelJob.getByRole('button', { name: /service completed/i }).click()
   await mabelJob.getByLabel('Payment received').fill('14')
   await mabelJob.getByLabel('Method').selectOption('cash')
   await mabelJob.getByRole('button', { name: /mark received/i }).click()
@@ -931,23 +937,33 @@ test('admin confirms cash received by staff into the company account', async ({
     year: 'numeric',
   }).format(new Date(`${dateInputFromToday(0)}T12:00:00`))
   const acknowledgementMessage = `We have received your cash payment of £14.00 for 30 minute walk on ${todayLabel}. Thank you.`
+  const fulfillmentMessage = `Your 30 minute walk appointment on ${todayLabel} was fulfilled. Staff note: Mabel was calm and enjoyed the woodland route.`
 
   await loginWithEmail(page, 'walker@waggulous.local')
 
   const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
-  await mabelJob.getByRole('button', { name: /^picked up$/i }).click()
+  await mabelJob.getByRole('button', { name: /^service started$/i }).click()
   await expect(mabelJob).toContainText('in progress')
   await expect(
-    mabelJob.getByRole('button', { name: /picked up in error/i }),
+    mabelJob.getByRole('button', { name: /reset service/i }),
   ).toBeEnabled()
-  await mabelJob.getByRole('button', { name: /picked up in error/i }).click()
+  await mabelJob.getByRole('button', { name: /reset service/i }).click()
   await expect(mabelJob).toContainText('approved')
   await expect(
-    mabelJob.getByRole('button', { name: /^picked up$/i }),
+    mabelJob.getByRole('button', { name: /^service started$/i }),
   ).toBeEnabled()
-  await expect(mabelJob.getByRole('button', { name: /returned/i })).toBeDisabled()
-  await mabelJob.getByRole('button', { name: /^picked up$/i }).click()
-  await mabelJob.getByRole('button', { name: /returned/i }).click()
+  await expect(
+    mabelJob.getByRole('button', { name: /service completed/i }),
+  ).toBeDisabled()
+  await mabelJob.getByRole('button', { name: /^service started$/i }).click()
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('completion note')
+    await dialog.accept('Mabel was calm and enjoyed the woodland route.')
+  })
+  await mabelJob.getByRole('button', { name: /service completed/i }).click()
+  await expect(mabelJob).toContainText(
+    'Completion note: Mabel was calm and enjoyed the woodland route.',
+  )
   await mabelJob.getByLabel('Payment received').fill('14')
   await mabelJob.getByLabel('Method').selectOption('cash')
   await mabelJob.getByRole('button', { name: /mark received/i }).click()
@@ -1015,10 +1031,15 @@ test('admin confirms cash received by staff into the company account', async ({
     body: acknowledgementMessage,
     senderId: 'u-admin',
   })
+  expect(paymentState.messages).toContainEqual({
+    body: fulfillmentMessage,
+    senderId: 'u-walker',
+  })
 
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'sam@example.com')
   await page.getByRole('button', { name: 'Messages' }).click()
+  await expect(page.getByText(fulfillmentMessage)).toBeVisible()
   await expect(page.getByText(acknowledgementMessage)).toBeVisible()
 })
 
@@ -1028,8 +1049,12 @@ test('admin can remove a staff-entered payment added in error', async ({
   await loginWithEmail(page, 'walker@waggulous.local')
 
   const mabelJob = page.locator('article').filter({ hasText: 'Mabel' })
-  await mabelJob.getByRole('button', { name: /^picked up$/i }).click()
-  await mabelJob.getByRole('button', { name: /returned/i }).click()
+  await mabelJob.getByRole('button', { name: /^service started$/i }).click()
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('completion note')
+    await dialog.accept('Payment removal test completion note.')
+  })
+  await mabelJob.getByRole('button', { name: /service completed/i }).click()
   await mabelJob.getByLabel('Payment received').fill('14')
   await mabelJob.getByLabel('Method').selectOption('cash')
   await mabelJob.getByRole('button', { name: /mark received/i }).click()
@@ -1251,7 +1276,7 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
     page
       .locator('article')
       .filter({ hasText: 'Bertie' })
-      .getByRole('button', { name: /^picked up$/i }),
+      .getByRole('button', { name: /^service started$/i }),
   ).toBeDisabled()
   await expect(
     page.locator('article').filter({ hasText: 'Bertie' }),
@@ -1351,12 +1376,14 @@ test('mobile MVP journey covers customer, admin, and walker workspaces', async (
   await page.getByRole('button', { name: /sign out/i }).click()
   await loginWithEmail(page, 'walker@waggulous.local')
   await expect(
-    page.getByRole('heading', { name: /log pickup and return/i }),
+    page.getByRole('heading', {
+      name: /log service start and completion/i,
+    }),
   ).toBeVisible()
   await page
     .locator('article')
     .filter({ hasText: 'Mabel' })
-    .getByRole('button', { name: /^picked up$/i })
+    .getByRole('button', { name: /^service started$/i })
     .click()
   await expect(page.getByText('in progress')).toBeVisible()
 })

@@ -151,6 +151,9 @@ type Booking = {
   walkerId?: string
   pickedUpAt?: string
   returnedAt?: string
+  serviceCompletionNote?: string
+  serviceCompletedById?: string
+  serviceCompletedMessageId?: string
 }
 
 type RecurringBooking = {
@@ -1557,7 +1560,9 @@ function App() {
 
         const remoteData = normaliseAppData(snapshot.val())
         const remoteJson = serialiseAppData(remoteData)
-        const nextData = reconcilePendingBookingUpdates(remoteData)
+        const nextData = ensureServiceCompletionMessages(
+          reconcilePendingBookingUpdates(remoteData),
+        )
         const nextJson = serialiseAppData(nextData)
         const hasPendingLocalUpdates = nextJson !== remoteJson
         lastFirebaseJsonRef.current = remoteJson
@@ -3321,9 +3326,14 @@ function WalkerDashboard({
             />
           )}
           <p className="muted">
-            Pickup: {formatDateTime(booking.pickedUpAt)} · Return:{' '}
+            Started: {formatDateTime(booking.pickedUpAt)} · Completed:{' '}
             {formatDateTime(booking.returnedAt)}
           </p>
+          {booking.serviceCompletionNote && (
+            <p className="muted">
+              Completion note: {booking.serviceCompletionNote}
+            </p>
+          )}
         </div>
         <div className="row-actions">
           <button
@@ -3338,7 +3348,7 @@ function WalkerDashboard({
             }
           >
             <Clock size={16} />
-            Picked up
+            Service started
           </button>
           <button
             className="button secondary"
@@ -3347,21 +3357,23 @@ function WalkerDashboard({
             onClick={() => resetBookingPickup(setData, booking.id)}
           >
             <X size={16} />
-            Picked up in error
+            Reset service
           </button>
           <button
             className="button primary"
             type="button"
             disabled={!booking.pickedUpAt || Boolean(booking.returnedAt)}
-            onClick={() =>
-              stampBooking(setData, booking.id, {
-                returnedAt: new Date().toISOString(),
-                status: 'completed',
-              })
-            }
+            onClick={() => {
+              const note = window.prompt(
+                'Add a service completion note for audit and the client.',
+                '',
+              )
+              if (note === null) return
+              completeBookingService(setData, booking.id, user.id, note)
+            }}
           >
             <Check size={16} />
-            Returned
+            Service completed
           </button>
         </div>
         <PaymentControls
@@ -3389,7 +3401,7 @@ function WalkerDashboard({
             title={`${selectedDateActiveBookings.length} active job${
               selectedDateActiveBookings.length === 1 ? '' : 's'
             } for ${formatDate(selectedJobDate)}`}
-            summary="Pickup, return, and payment notes stay attached to the selected day so the next action is always close."
+            summary="Service progress, completion notes, and payment notes stay attached to the selected day so the next action is always close."
             meta={`${selectedDateCompletedBookings.length} completed · ${
               user.canSelfAssign ? claimableBookings.length : 0
             } available to claim`}
@@ -3430,7 +3442,7 @@ function WalkerDashboard({
           />
           <WorkspaceTitle
             eyebrow="Walker workflow"
-            title="Log pickup and return for authorised pets."
+            title="Log service start and completion for authorised pets."
           />
           <div className="staff-bookings-toolbar">
             <label className="field-inline">
@@ -3552,14 +3564,14 @@ function WalkerDashboard({
           <section className="workspace nested-workspace">
             <WorkspaceTitle
               eyebrow="Completed"
-              title={`Jobs completed on ${formatDate(selectedJobDate)}.`}
+              title={`Services completed on ${formatDate(selectedJobDate)}.`}
             />
             {selectedDateCompletedBookings.length === 0 ? (
               <div className="empty-state">
-                <h3>No jobs completed on this date.</h3>
+                <h3>No services completed on this date.</h3>
                 <p>
-                  Returned jobs for the selected day will move here once they
-                  are completed.
+                  Completed services for the selected day will move here once
+                  they are fulfilled.
                 </p>
               </div>
             ) : (
@@ -4969,8 +4981,8 @@ function ClientBookingPanel({
             <div className="empty-state">
               <h3>No completed services.</h3>
               <p>
-                Services appear here after pickup and return have both been
-                marked.
+                Services appear here after they have been started and
+                completed.
               </p>
             </div>
           ) : (
@@ -5532,8 +5544,8 @@ function PaymentsAdminPanel({
                   <div className="empty-state">
                     <h3>No completed services.</h3>
                     <p>
-                      Services appear here after pickup and return have both
-                      been marked.
+                      Services appear here after they have been started and
+                      completed.
                     </p>
                   </div>
                 ) : (
@@ -8385,7 +8397,7 @@ function BookingList({
               </p>
               {(booking.pickedUpAt || booking.returnedAt) && (
                 <p className="muted">
-                  Pickup: {formatDateTime(booking.pickedUpAt)} · Return:{' '}
+                  Started: {formatDateTime(booking.pickedUpAt)} · Completed:{' '}
                   {formatDateTime(booking.returnedAt)}
                 </p>
               )}
@@ -8610,6 +8622,95 @@ function confirmPendingPayment(
   })
 }
 
+function serviceCompletionMessageBody(data: AppData, booking: Booking) {
+  const service = data.services.find(
+    (candidate) => candidate.id === booking.serviceId,
+  )
+  const note = booking.serviceCompletionNote?.trim()
+  const baseMessage = `Your ${
+    service?.name ?? 'service'
+  } appointment on ${formatDate(booking.date)} was fulfilled.`
+
+  return note ? `${baseMessage} Staff note: ${note}` : baseMessage
+}
+
+function ensureServiceCompletionMessages(data: AppData): AppData {
+  const missingMessages = data.bookings.flatMap((booking): Message[] => {
+    if (
+      !booking.serviceCompletedMessageId ||
+      data.messages.some(
+        (message) => message.id === booking.serviceCompletedMessageId,
+      )
+    ) {
+      return []
+    }
+
+    return [
+      {
+        id: booking.serviceCompletedMessageId,
+        bookingId: booking.id,
+        senderId: booking.serviceCompletedById ?? booking.walkerId ?? 'u-owner',
+        recipientId: booking.customerId,
+        body: serviceCompletionMessageBody(data, booking),
+        createdAt: booking.returnedAt ?? new Date().toISOString(),
+      },
+    ]
+  })
+
+  return missingMessages.length
+    ? { ...data, messages: [...missingMessages, ...data.messages] }
+    : data
+}
+
+function completeBookingService(
+  setData: Dispatch<SetStateAction<AppData>>,
+  bookingId: string,
+  staffId: string,
+  note: string,
+) {
+  const returnedAt = new Date().toISOString()
+  const messageId = makeId('m')
+  const completionNote = note.trim()
+  const fields: Partial<Booking> = {
+    returnedAt,
+    status: 'completed',
+    serviceCompletedById: staffId,
+    serviceCompletedMessageId: messageId,
+  }
+
+  if (completionNote) {
+    fields.serviceCompletionNote = completionNote
+  }
+
+  queuePendingBookingUpdate(bookingId, fields)
+
+  setData((current) => {
+    const booking = current.bookings.find(
+      (candidate) => candidate.id === bookingId,
+    )
+
+    if (!booking || !booking.pickedUpAt || booking.returnedAt) return current
+
+    const completedBooking = { ...booking, ...fields }
+    const message: Message = {
+      id: messageId,
+      bookingId,
+      senderId: staffId,
+      recipientId: booking.customerId,
+      body: serviceCompletionMessageBody(current, completedBooking),
+      createdAt: returnedAt,
+    }
+
+    return {
+      ...current,
+      bookings: current.bookings.map((candidate) =>
+        candidate.id === bookingId ? completedBooking : candidate,
+      ),
+      messages: [message, ...current.messages],
+    }
+  })
+}
+
 function approveBooking(
   booking: Booking,
   data: AppData,
@@ -8766,6 +8867,9 @@ function resetBookingPickup(
   queuePendingBookingUpdate(bookingId, {
     pickedUpAt: null,
     returnedAt: null,
+    serviceCompletionNote: null,
+    serviceCompletedById: null,
+    serviceCompletedMessageId: null,
     status: 'approved',
   })
 
@@ -8777,6 +8881,9 @@ function resetBookingPickup(
       const nextBooking = { ...booking }
       delete nextBooking.pickedUpAt
       delete nextBooking.returnedAt
+      delete nextBooking.serviceCompletionNote
+      delete nextBooking.serviceCompletedById
+      delete nextBooking.serviceCompletedMessageId
 
       return {
         ...nextBooking,
