@@ -102,6 +102,8 @@ type Pet = {
   age: string
   notes: string
   photo?: string
+  status?: 'active' | 'removed'
+  removedAt?: string
 }
 
 type Service = {
@@ -525,6 +527,10 @@ function getTheme(themeId: ThemeId) {
 
 function makeId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`
+}
+
+function petIsActive(pet: Pet) {
+  return pet.status !== 'removed'
 }
 
 function randomCharacterFrom(characters: string) {
@@ -2009,7 +2015,9 @@ function CustomerDashboard({
   const [tab, setTab] = useState<
     'overview' | 'pets' | 'book' | 'money' | 'chat' | 'account'
   >('overview')
-  const pets = data.pets.filter((pet) => pet.ownerId === user.id)
+  const pets = data.pets.filter(
+    (pet) => pet.ownerId === user.id && petIsActive(pet),
+  )
   const bookings = data.bookings
     .filter((booking) => booking.customerId === user.id)
     .sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`))
@@ -3588,7 +3596,7 @@ function ClientBookingPanel({
   const activeServices = data.services.filter((service) => service.active)
   const walkers = data.users.filter((candidate) => candidate.role === 'walker')
   const [panelTab, setPanelTab] = useState<
-    'client' | 'appointment' | 'payment'
+    'client' | 'pets' | 'appointment' | 'payment'
   >('client')
   const [selectedClientId, setSelectedClientId] = useState(
     customers[0]?.id ?? '',
@@ -3626,6 +3634,13 @@ function ClientBookingPanel({
     age: '',
     notes: '',
   })
+  const [existingPetDraft, setExistingPetDraft] = useState({
+    name: '',
+    species: '',
+    breed: '',
+    age: '',
+    notes: '',
+  })
   const [bookingDraft, setBookingDraft] = useState({
     serviceId: activeServices[0]?.id ?? '',
     scheduleMode: 'manual' as 'slot' | 'manual',
@@ -3647,7 +3662,9 @@ function ClientBookingPanel({
     (customer) => customer.id === selectedClientId,
   )
   const existingPets = selectedClientId
-    ? data.pets.filter((pet) => pet.ownerId === selectedClientId)
+    ? data.pets.filter(
+        (pet) => pet.ownerId === selectedClientId && petIsActive(pet),
+      )
     : []
   const selectedService = activeServices.find(
     (service) => service.id === bookingDraft.serviceId,
@@ -3685,6 +3702,16 @@ function ClientBookingPanel({
 
   function resetClientPetDraft() {
     setClientPetDraft({
+      name: '',
+      species: '',
+      breed: '',
+      age: '',
+      notes: '',
+    })
+  }
+
+  function resetExistingPetDraft() {
+    setExistingPetDraft({
       name: '',
       species: '',
       breed: '',
@@ -3773,6 +3800,7 @@ function ClientBookingPanel({
       breed: pet.breed,
       age: pet.age,
       notes: pet.notes,
+      status: 'active',
     }))
 
     setData((current) => ({
@@ -3805,6 +3833,69 @@ function ClientBookingPanel({
       age: '',
       notes: '',
     })
+  }
+
+  function addPetToSelectedClient(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    setSuccessMessage('')
+
+    if (!selectedCustomer) {
+      setError('Choose a client before adding a pet.')
+      return
+    }
+
+    if (!existingPetDraft.name.trim()) {
+      setError('Pet name is required before adding it to the client.')
+      return
+    }
+
+    const newPet: Pet = {
+      id: makeId('p'),
+      ownerId: selectedCustomer.id,
+      name: existingPetDraft.name.trim(),
+      species: existingPetDraft.species.trim() || 'Pet',
+      breed: existingPetDraft.breed.trim(),
+      age: existingPetDraft.age.trim(),
+      notes: existingPetDraft.notes.trim(),
+      status: 'active',
+    }
+
+    setData((current) => ({
+      ...current,
+      pets: [...current.pets, newPet],
+    }))
+    resetExistingPetDraft()
+    setSuccessMessage(`${newPet.name} added to ${selectedCustomer.name}.`)
+  }
+
+  function removePetFromSelectedClient(pet: Pet) {
+    if (
+      !window.confirm(
+        `Remove ${pet.name} from active pets? Historical bookings will keep this pet.`,
+      )
+    ) {
+      return
+    }
+
+    setData((current) => ({
+      ...current,
+      pets: current.pets.map((candidate) =>
+        candidate.id === pet.id
+          ? {
+              ...candidate,
+              status: 'removed',
+              removedAt: new Date().toISOString(),
+            }
+          : candidate,
+      ),
+    }))
+    setPetDraft((current) => ({
+      ...current,
+      selectedPetIds: current.selectedPetIds.filter((id) => id !== pet.id),
+    }))
+    setError('')
+    setSuccessMessage(`${pet.name} removed from active pets.`)
   }
 
   function submitAppointment(event: FormEvent) {
@@ -3877,12 +3968,16 @@ function ClientBookingPanel({
             breed: petDraft.breed.trim(),
             age: petDraft.age.trim(),
             notes: petDraft.notes.trim(),
+            status: 'active',
           }
         : null
       const petIds = [
         ...petDraft.selectedPetIds.filter((petId) =>
           current.pets.some(
-            (pet) => pet.id === petId && pet.ownerId === customer.id,
+            (pet) =>
+              pet.id === petId &&
+              pet.ownerId === customer.id &&
+              petIsActive(pet),
           ),
         ),
         ...(newPet ? [newPet.id] : []),
@@ -4062,7 +4157,7 @@ function ClientBookingPanel({
     <section className="workspace">
       <WorkspaceTitle
         eyebrow="Client bookings"
-        title="Save clients, then add verbal appointments."
+        title="Save clients, manage pets, then add verbal appointments."
       />
       <div className="segmented-control" aria-label="Client booking step">
         <button
@@ -4075,6 +4170,17 @@ function ClientBookingPanel({
           }}
         >
           New client
+        </button>
+        <button
+          className={panelTab === 'pets' ? 'is-active' : ''}
+          type="button"
+          onClick={() => {
+            setPanelTab('pets')
+            setError('')
+            setSuccessMessage('')
+          }}
+        >
+          Client pets
         </button>
         <button
           className={panelTab === 'appointment' ? 'is-active' : ''}
@@ -4263,6 +4369,150 @@ function ClientBookingPanel({
             Save client
           </button>
         </form>
+      )}
+
+      {panelTab === 'pets' && (
+        <section className="workspace nested-workspace">
+          <WorkspaceTitle
+            eyebrow="Client pets"
+            title="Add pets or remove them from future bookings."
+          />
+          <label className="wide">
+            Client
+            <select
+              value={selectedClientId}
+              onChange={(event) => {
+                setSelectedClientId(event.target.value)
+                setPetDraft((current) => ({
+                  ...current,
+                  selectedPetIds: [],
+                }))
+              }}
+            >
+              <option value="">Choose client</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name} · {customer.email}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {selectedCustomer && (
+            <>
+              {existingPets.length > 0 ? (
+                <div className="booking-stack">
+                  {existingPets.map((pet) => (
+                    <article className="timeline-panel" key={pet.id}>
+                      <div>
+                        <h3>
+                          <PetSpeciesIcon species={pet.species} />
+                          {pet.name}
+                        </h3>
+                        <p>
+                          {pet.species} · {pet.breed || 'Breed not set'} · Age{' '}
+                          {pet.age || 'not set'}
+                        </p>
+                        <p className="muted">
+                          {pet.notes || 'No care notes yet.'}
+                        </p>
+                      </div>
+                      <div className="row-actions">
+                        <button
+                          className="button danger"
+                          type="button"
+                          onClick={() => removePetFromSelectedClient(pet)}
+                        >
+                          <X size={16} />
+                          Remove from active pets
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">
+                  <h3>No active pets for this client.</h3>
+                  <p>Add the pets staff should be able to book services for.</p>
+                </div>
+              )}
+
+              <form className="form-grid" onSubmit={addPetToSelectedClient}>
+                <label>
+                  Pet name
+                  <input
+                    value={existingPetDraft.name}
+                    onChange={(event) =>
+                      setExistingPetDraft({
+                        ...existingPetDraft,
+                        name: event.target.value,
+                      })
+                    }
+                    placeholder="Mabel"
+                  />
+                </label>
+                <SpeciesBreedFields
+                  data={data}
+                  species={existingPetDraft.species}
+                  breed={existingPetDraft.breed}
+                  onSpeciesChange={(species) =>
+                    setExistingPetDraft({
+                      ...existingPetDraft,
+                      species,
+                      breed:
+                        species === existingPetDraft.species
+                          ? existingPetDraft.breed
+                          : '',
+                    })
+                  }
+                  onBreedChange={(breed) =>
+                    setExistingPetDraft({
+                      ...existingPetDraft,
+                      breed,
+                    })
+                  }
+                />
+                <label>
+                  Age
+                  <input
+                    value={existingPetDraft.age}
+                    onChange={(event) =>
+                      setExistingPetDraft({
+                        ...existingPetDraft,
+                        age: event.target.value,
+                      })
+                    }
+                    placeholder="4"
+                  />
+                </label>
+                <label className="wide">
+                  Pet notes
+                  <textarea
+                    value={existingPetDraft.notes}
+                    onChange={(event) =>
+                      setExistingPetDraft({
+                        ...existingPetDraft,
+                        notes: event.target.value,
+                      })
+                    }
+                    placeholder="Harness, feeding, temperament, medication, vet notes"
+                  />
+                </label>
+                <button className="button primary" type="submit">
+                  <Plus size={16} />
+                  Add pet to client
+                </button>
+              </form>
+            </>
+          )}
+
+          {error && <p className="form-error wide">{error}</p>}
+          {successMessage && (
+            <p className="form-success wide" role="status">
+              {successMessage}
+            </p>
+          )}
+        </section>
       )}
 
       {panelTab === 'appointment' && (
@@ -6327,6 +6577,7 @@ function PetsPanel({
           age: draft.age.trim(),
           notes: draft.notes.trim(),
           photo: draft.photo || undefined,
+          status: 'active',
         },
       ],
     })

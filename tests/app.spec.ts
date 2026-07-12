@@ -732,6 +732,100 @@ test('walker jobs are filtered by date with completed jobs separated', async ({
   await expect(page.locator('.staff-jobs-timeline')).toBeVisible()
 })
 
+test('staff can manually book services and manage active client pets', async ({
+  page,
+}) => {
+  const todayDate = dateInputFromToday(0)
+
+  await loginWithEmail(page, 'walker@waggulous.local')
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByRole('button', { name: 'Appointment' }).click()
+  await page.getByRole('combobox', { name: 'Client' }).selectOption('u-eliza')
+  await page.getByRole('checkbox', { name: 'Tilly' }).check()
+  await page.getByLabel('Service').selectOption('s-pop-in')
+  await page.getByLabel('Date', { exact: true }).fill(todayDate)
+  await page.getByLabel('Time', { exact: true }).fill('16:20')
+  await page
+    .getByRole('textbox', { name: 'Booking notes' })
+    .fill('Manual request: feed cats and check litter tray.')
+  await page.getByRole('button', { name: /add approved booking/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'Approved Pet sitting pop-in booking added for Eliza Moore',
+  )
+
+  await page.getByRole('button', { name: 'Jobs' }).click()
+  await page.getByLabel('Job date').fill(todayDate)
+  await expect(
+    page
+      .locator('article')
+      .filter({ hasText: 'Tilly' })
+      .filter({ hasText: '16:20' }),
+  ).toContainText('Pet sitting pop-in')
+
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByRole('button', { name: 'Client pets' }).click()
+  await page.getByRole('combobox', { name: 'Client' }).selectOption('u-eliza')
+  await page.getByLabel('Pet name').fill('Misty')
+  await page.getByLabel('Species').fill('Cat')
+  await page
+    .getByLabel('Pet notes')
+    .fill('Indoor cat. Feed twice daily and keep kitchen window shut.')
+  await page.getByRole('button', { name: /add pet to client/i }).click()
+  await expect(page.getByRole('status')).toContainText(
+    'Misty added to Eliza Moore.',
+  )
+
+  const mistyPet = page.locator('article').filter({ hasText: 'Misty' })
+  await expect(mistyPet).toContainText('Indoor cat')
+  page.once('dialog', async (dialog) => {
+    expect(dialog.message()).toContain('Remove Misty from active pets')
+    await dialog.accept()
+  })
+  await mistyPet
+    .getByRole('button', { name: /remove from active pets/i })
+    .click()
+  await expect(page.getByRole('status')).toContainText(
+    'Misty removed from active pets.',
+  )
+  await expect(mistyPet).toHaveCount(0)
+
+  await page.getByRole('button', { name: 'Appointment' }).click()
+  await expect(page.getByRole('checkbox', { name: 'Misty' })).toHaveCount(0)
+
+  const staffClientState = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    const manualBooking = data.bookings.find(
+      (booking: {
+        customerId: string
+        serviceId: string
+        time: string
+        walkerId?: string
+      }) =>
+        booking.customerId === 'u-eliza' &&
+        booking.serviceId === 's-pop-in' &&
+        booking.time === '16:20',
+    )
+    const removedPet = data.pets.find(
+      (pet: { ownerId: string; name: string }) =>
+        pet.ownerId === 'u-eliza' && pet.name === 'Misty',
+    )
+    return { manualBooking, removedPet }
+  })
+  expect(staffClientState.manualBooking).toMatchObject({
+    customerId: 'u-eliza',
+    petIds: ['p-tilly'],
+    serviceId: 's-pop-in',
+    status: 'approved',
+    walkerId: 'u-walker',
+  })
+  expect(staffClientState.removedPet).toMatchObject({
+    name: 'Misty',
+    ownerId: 'u-eliza',
+    status: 'removed',
+  })
+  expect(staffClientState.removedPet.removedAt).toEqual(expect.any(String))
+})
+
 test('admin confirms cash received by staff into the company account', async ({
   page,
 }) => {
