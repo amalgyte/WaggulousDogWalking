@@ -438,7 +438,7 @@ function normaliseAppData(value: unknown): AppData {
   const data =
     value && typeof value === 'object' ? (value as Partial<AppData>) : {}
 
-    return mergeDemoSeedData({
+    return cleanDoubleBookedPets(mergeDemoSeedData({
       themeId: isThemeId(data.themeId) ? data.themeId : seedData.themeId,
       petSpeciesColours: mergePetSpeciesColours(data.petSpeciesColours),
       petSpeciesBreedCatalogue: normalisePetSpeciesBreedCatalogue(
@@ -454,7 +454,7 @@ function normaliseAppData(value: unknown): AppData {
     bookings: normaliseCollection<Booking>(data.bookings),
     transactions: normaliseCollection<Transaction>(data.transactions),
     messages: normaliseCollection<Message>(data.messages),
-  })
+  }))
 }
 
 function serialiseAppData(data: AppData) {
@@ -1386,6 +1386,145 @@ function serviceSlotLabel(slot: ServiceSlot) {
 
 function isActiveBookingForCapacity(booking: Booking) {
   return ['requested', 'approved', 'in-progress'].includes(booking.status)
+}
+
+type BookingOverlapCandidate = Pick<
+  Booking,
+  'date' | 'endTime' | 'id' | 'petIds' | 'serviceId' | 'time'
+>
+
+function bookingActivePriority(booking: Booking) {
+  if (booking.status === 'in-progress') return 3
+  if (booking.status === 'approved') return 2
+  if (booking.status === 'requested') return 1
+  return 0
+}
+
+function bookingTimeRange(
+  data: AppData,
+  booking: BookingOverlapCandidate,
+) {
+  const service = data.services.find(
+    (candidate) => candidate.id === booking.serviceId,
+  )
+  const start = timeToMinutes(booking.time)
+  return {
+    start,
+    end: start + getBookingDurationMinutes(booking as Booking, service),
+  }
+}
+
+function bookingTimeRangesOverlap(
+  data: AppData,
+  first: BookingOverlapCandidate,
+  second: BookingOverlapCandidate,
+) {
+  const firstRange = bookingTimeRange(data, first)
+  const secondRange = bookingTimeRange(data, second)
+  return firstRange.start < secondRange.end && secondRange.start < firstRange.end
+}
+
+function bookingsSharePet(
+  first: Pick<Booking, 'petIds'>,
+  second: Pick<Booking, 'petIds'>,
+) {
+  return first.petIds.some((petId) => second.petIds.includes(petId))
+}
+
+function findPetBookingConflict(
+  data: AppData,
+  candidate: BookingOverlapCandidate,
+) {
+  return data.bookings.find(
+    (booking) =>
+      booking.id !== candidate.id &&
+      booking.date === candidate.date &&
+      isActiveBookingForCapacity(booking) &&
+      bookingsSharePet(booking, candidate) &&
+      bookingTimeRangesOverlap(data, booking, candidate),
+  )
+}
+
+function petBookingConflictMessage(
+  data: AppData,
+  candidate: BookingOverlapCandidate,
+  conflict: Booking,
+) {
+  const pet = data.pets.find(
+    (candidatePet) =>
+      candidate.petIds.includes(candidatePet.id) &&
+      conflict.petIds.includes(candidatePet.id),
+  )
+
+  return `${
+    pet?.name ?? 'This pet'
+  } already has an active booking on ${formatDate(candidate.date)} at ${formatBookingTime(
+    conflict,
+  )}.`
+}
+
+function validatePetBookingAvailability(
+  data: AppData,
+  candidates: BookingOverlapCandidate[],
+) {
+  for (const candidate of candidates) {
+    const conflict = findPetBookingConflict(data, candidate)
+    if (conflict) return petBookingConflictMessage(data, candidate, conflict)
+  }
+
+  return ''
+}
+
+function cleanDoubleBookedPets(data: AppData): AppData {
+  const keptBookings: Booking[] = []
+  const cancelledBookingIds = new Set<string>()
+  const orderedBookings = data.bookings
+    .map((booking, index) => ({ booking, index }))
+    .sort((first, second) => {
+      const priorityDiff =
+        bookingActivePriority(second.booking) - bookingActivePriority(first.booking)
+      return priorityDiff || second.index - first.index
+    })
+
+  for (const { booking } of orderedBookings) {
+    if (!isActiveBookingForCapacity(booking)) continue
+
+    const duplicate = keptBookings.some(
+      (keptBooking) =>
+        booking.date === keptBooking.date &&
+        bookingsSharePet(booking, keptBooking) &&
+        bookingTimeRangesOverlap(data, booking, keptBooking),
+    )
+
+    if (duplicate) {
+      cancelledBookingIds.add(booking.id)
+    } else {
+      keptBookings.push(booking)
+    }
+  }
+
+  if (cancelledBookingIds.size === 0) return data
+
+  const cancelledAt = new Date().toISOString()
+
+  return {
+    ...data,
+    bookings: data.bookings.map((booking) =>
+      cancelledBookingIds.has(booking.id)
+        ? {
+            ...booking,
+            status: 'cancelled',
+            cancelledAt: booking.cancelledAt ?? cancelledAt,
+            notes: [
+              booking.notes,
+              'Automatically cancelled because this pet already had an overlapping active booking.',
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          }
+        : booking,
+    ),
+  }
 }
 
 function slotAppliesToDate(slot: ServiceSlot, dateValue: string) {
@@ -3988,6 +4127,39 @@ function ClientBookingPanel({
       }
     }
 
+    const selectedExistingPetIds = petDraft.selectedPetIds.filter((petId) =>
+      existingPets.some((pet) => pet.id === petId),
+    )
+    const bookingDates =
+      bookingDraft.scheduleMode === 'slot' && bookingDraft.recurring
+        ? getRecurringDates(bookingDraft.date, bookingDraft.recurringDays)
+        : [bookingDraft.date]
+    const petConflictError =
+      selectedExistingPetIds.length > 0
+        ? validatePetBookingAvailability(
+            data,
+            bookingDates.map((date) => ({
+              id: `candidate-${date}`,
+              petIds: selectedExistingPetIds,
+              serviceId: selectedService.id,
+              date,
+              time:
+                bookingDraft.scheduleMode === 'slot' && selectedAppointmentSlot
+                  ? selectedAppointmentSlot.startTime
+                  : bookingDraft.time,
+              endTime:
+                bookingDraft.scheduleMode === 'slot' && selectedAppointmentSlot
+                  ? selectedAppointmentSlot.endTime
+                  : undefined,
+            })),
+          )
+        : ''
+
+    if (petConflictError) {
+      setError(petConflictError)
+      return
+    }
+
     setData((current) => {
       const customer = current.users.find(
         (candidate) => candidate.id === selectedCustomer.id,
@@ -4019,10 +4191,6 @@ function ClientBookingPanel({
         bookingDraft.scheduleMode === 'slot' && bookingDraft.recurring
           ? makeId('rb')
           : undefined
-      const bookingDates =
-        bookingDraft.scheduleMode === 'slot' && bookingDraft.recurring
-          ? getRecurringDates(bookingDraft.date, bookingDraft.recurringDays)
-          : [bookingDraft.date]
       const bookings: Booking[] = bookingDates.map((date) => ({
         id: makeId('b'),
         customerId: customer.id,
@@ -6970,6 +7138,21 @@ function BookingRequestPanel({
       draft.recurring && recurringDates.length > 0
         ? validateRecurringSlotBookings(data, selectedSlot, recurringDates)
         : ''
+    const bookingDates = draft.recurring ? recurringDates : [draft.date]
+    const petConflictError =
+      selectedService && selectedSlot
+        ? validatePetBookingAvailability(
+            data,
+            bookingDates.map((date) => ({
+              id: `candidate-${date}`,
+              petIds: draft.petIds,
+              serviceId: selectedService.id,
+              date,
+              time: selectedSlot.startTime,
+              endTime: selectedSlot.endTime,
+            })),
+          )
+        : ''
 
     if (
       !selectedService ||
@@ -6978,9 +7161,11 @@ function BookingRequestPanel({
       !draft.date ||
       slotError ||
       recurringError ||
+      petConflictError ||
       (draft.recurring && draft.recurringDays.length === 0)
     ) {
       setError(
+        petConflictError ||
         recurringError ||
           slotError ||
           'Choose pets, date, an available slot, and repeat days.',
@@ -6989,7 +7174,6 @@ function BookingRequestPanel({
     }
 
     const recurringBookingId = draft.recurring ? makeId('rb') : undefined
-    const bookingDates = draft.recurring ? recurringDates : [draft.date]
     const bookings: Booking[] = bookingDates.map((date) => ({
       id: makeId('b'),
       customerId: customer.id,

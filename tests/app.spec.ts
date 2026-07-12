@@ -828,6 +828,86 @@ test('staff can manually book services and manage active client pets', async ({
   expect(staffClientState.removedPet.removedAt).toEqual(expect.any(String))
 })
 
+test('pet double bookings are cleaned up and blocked', async ({ page }) => {
+  const todayDate = dateInputFromToday(0)
+
+  await page.evaluate((today) => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    localStorage.setItem(
+      'waggulous-mvp-data',
+      JSON.stringify({
+        ...data,
+        bookings: [
+          {
+            id: 'b-duplicate-mabel',
+            customerId: 'u-customer',
+            petIds: ['p-mabel'],
+            serviceId: 's-walk-30',
+            date: today,
+            time: '09:40',
+            notes: 'Accidental double booking.',
+            status: 'approved',
+            price: 14,
+            walkerId: 'u-maya',
+          },
+          ...data.bookings,
+        ],
+      }),
+    )
+  }, todayDate)
+  await page.reload()
+  await page.waitForFunction(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.bookings?.some(
+      (booking: { id: string; status: string }) =>
+        booking.id === 'b-duplicate-mabel' && booking.status === 'cancelled',
+    )
+  })
+
+  const cleanedState = await page.evaluate(() => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.bookings.find(
+      (booking: { id: string }) => booking.id === 'b-duplicate-mabel',
+    )
+  })
+  expect(cleanedState).toMatchObject({
+    id: 'b-duplicate-mabel',
+    status: 'cancelled',
+  })
+  expect(cleanedState.notes).toContain('Automatically cancelled')
+
+  await loginWithEmail(page, 'admin@waggulous.com')
+  await page.getByRole('button', { name: 'Clients' }).click()
+  await page.getByRole('button', { name: 'Appointment' }).click()
+  await page.getByRole('combobox', { name: 'Client' }).selectOption('u-customer')
+  await page.getByRole('checkbox', { name: 'Mabel' }).check()
+  await page.getByLabel('Service').selectOption('s-walk-30')
+  await page.getByLabel('Date', { exact: true }).fill(todayDate)
+  await page.getByLabel('Time', { exact: true }).fill('09:45')
+  await page.getByRole('button', { name: /add approved booking/i }).click()
+  await expect(page.locator('.form-error')).toContainText(
+    'Mabel already has an active booking',
+  )
+
+  const activeMabelOverlaps = await page.evaluate((today) => {
+    const data = JSON.parse(localStorage.getItem('waggulous-mvp-data') || '{}')
+    return data.bookings.filter(
+      (booking: {
+        date: string
+        petIds: string[]
+        status: string
+        time: string
+      }) =>
+        booking.date === today &&
+        booking.petIds.includes('p-mabel') &&
+        ['requested', 'approved', 'in-progress'].includes(booking.status) &&
+        booking.time >= '09:30' &&
+        booking.time < '10:00',
+    ).length
+  }, todayDate)
+  expect(activeMabelOverlaps).toBe(1)
+})
+
 test('admin can delegate service and payment admin functions to staff', async ({
   page,
 }) => {
