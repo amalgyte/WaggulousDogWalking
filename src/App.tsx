@@ -1388,40 +1388,13 @@ function isActiveBookingForCapacity(booking: Booking) {
   return ['requested', 'approved', 'in-progress'].includes(booking.status)
 }
 
-type BookingOverlapCandidate = Pick<
-  Booking,
-  'date' | 'endTime' | 'id' | 'petIds' | 'serviceId' | 'time'
->
+type BookingPetDateCandidate = Pick<Booking, 'date' | 'id' | 'petIds' | 'serviceId'>
 
 function bookingActivePriority(booking: Booking) {
   if (booking.status === 'in-progress') return 3
   if (booking.status === 'approved') return 2
   if (booking.status === 'requested') return 1
   return 0
-}
-
-function bookingTimeRange(
-  data: AppData,
-  booking: BookingOverlapCandidate,
-) {
-  const service = data.services.find(
-    (candidate) => candidate.id === booking.serviceId,
-  )
-  const start = timeToMinutes(booking.time)
-  return {
-    start,
-    end: start + getBookingDurationMinutes(booking as Booking, service),
-  }
-}
-
-function bookingTimeRangesOverlap(
-  data: AppData,
-  first: BookingOverlapCandidate,
-  second: BookingOverlapCandidate,
-) {
-  const firstRange = bookingTimeRange(data, first)
-  const secondRange = bookingTimeRange(data, second)
-  return firstRange.start < secondRange.end && secondRange.start < firstRange.end
 }
 
 function bookingsSharePet(
@@ -1433,21 +1406,21 @@ function bookingsSharePet(
 
 function findPetBookingConflict(
   data: AppData,
-  candidate: BookingOverlapCandidate,
+  candidate: BookingPetDateCandidate,
 ) {
   return data.bookings.find(
     (booking) =>
       booking.id !== candidate.id &&
       booking.date === candidate.date &&
+      booking.serviceId === candidate.serviceId &&
       isActiveBookingForCapacity(booking) &&
-      bookingsSharePet(booking, candidate) &&
-      bookingTimeRangesOverlap(data, booking, candidate),
+      bookingsSharePet(booking, candidate),
   )
 }
 
 function petBookingConflictMessage(
   data: AppData,
-  candidate: BookingOverlapCandidate,
+  candidate: BookingPetDateCandidate,
   conflict: Booking,
 ) {
   const pet = data.pets.find(
@@ -1465,7 +1438,7 @@ function petBookingConflictMessage(
 
 function validatePetBookingAvailability(
   data: AppData,
-  candidates: BookingOverlapCandidate[],
+  candidates: BookingPetDateCandidate[],
 ) {
   for (const candidate of candidates) {
     const conflict = findPetBookingConflict(data, candidate)
@@ -1492,8 +1465,8 @@ function cleanDoubleBookedPets(data: AppData): AppData {
     const duplicate = keptBookings.some(
       (keptBooking) =>
         booking.date === keptBooking.date &&
-        bookingsSharePet(booking, keptBooking) &&
-        bookingTimeRangesOverlap(data, booking, keptBooking),
+        booking.serviceId === keptBooking.serviceId &&
+        bookingsSharePet(booking, keptBooking),
     )
 
     if (duplicate) {
@@ -1517,7 +1490,7 @@ function cleanDoubleBookedPets(data: AppData): AppData {
             cancelledAt: booking.cancelledAt ?? cancelledAt,
             notes: [
               booking.notes,
-              'Automatically cancelled because this pet already had an overlapping active booking.',
+              'Automatically cancelled because this pet already had another active booking for the same service on this date.',
             ]
               .filter(Boolean)
               .join('\n'),
